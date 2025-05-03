@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { FileIcon, PlusIcon, SearchIcon, ArrowLeftIcon, MessageSquareIcon, PaperclipIcon, SendIcon, X, FileTextIcon, FileAudioIcon, FileImageIcon, Mic, MicOff } from "lucide-react"
+import { FileIcon, PlusIcon, SearchIcon, ArrowLeftIcon, MessageSquareIcon, PaperclipIcon, SendIcon, X, FileTextIcon, FileAudioIcon, FileImageIcon, Mic, MicOff, PlayIcon, PauseIcon, StopCircleIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
@@ -52,104 +52,152 @@ const threadColors = {
   indigo: "bg-indigo-500",
 }
 
-export default function ChatDocumentAnalysis() {
-  // State for handling UI mounting to prevent hydration issues
-  const [hasMounted, setHasMounted] = useState(false)
+// Hook to safely use browser APIs and ensure hydration safety
+function useHydration() {
+  const [hydrated, setHydrated] = useState(false);
   
   useEffect(() => {
-    setHasMounted(true)
-  }, [])
+    setHydrated(true);
+  }, []);
+  
+  return hydrated;
+}
 
-  // Chat threads state
-  const [threads, setThreads] = useState<ThreadType[]>([
+export default function ChatDocumentAnalysis() {
+  // Use hydration hook to safely detect client-side rendering
+  const isHydrated = useHydration();
+  
+  // IMPORTANT: Initial messages with deterministic IDs for server rendering
+  const initialMessages = [
     {
-      id: "1",
+      id: "sys-msg-1", // Using stable IDs for initial server render
+      type: "system" as MessageType,
+      content: "Hello! I'm your document analysis assistant. Upload files or ask me questions about your documents.",
+      timestamp: new Date('2023-05-01T12:00:00'), // Static date for SSR
+      sender: 'assistant' as const
+    }
+  ];
+
+  // Initial threads with stable IDs and static dates for server rendering
+  const initialThreads = [
+    {
+      id: "thread-1",
       title: "Financial Report Analysis",
       date: "May 1, 2023",
       lastMessage: "Here's what I found in the financial report...",
-      color: "purple",
+      color: "purple" as const,
     },
     {
-      id: "2",
+      id: "thread-2",
       title: "Sales Pitch Review",
       date: "April 28, 2023",
       lastMessage: "Your sales pitch has several key points that could be improved...",
-      color: "red",
+      color: "red" as const,
     },
     {
-      id: "3",
+      id: "thread-3",
       title: "Board Meeting Minutes",
       date: "April 15, 2023",
       lastMessage: "The board meeting minutes contain the following decisions...",
-      color: "blue",
-    },
-  ])
+      color: "blue" as const,
+    }
+  ];
+  
+  // Chat threads state
+  const [threads, setThreads] = useState<ThreadType[]>(initialThreads);
   
   // Active thread ID
-  const [activeThreadId, setActiveThreadId] = useState<string | null>("1")
+  const [activeThreadId, setActiveThreadId] = useState<string | null>("thread-1");
   
   // Chat messages
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "sys-1",
-      type: "system",
-      content: "Hello! I'm your document analysis assistant. Upload files or ask me questions about your documents.",
-      timestamp: new Date(),
-      sender: "assistant"
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   
   // Current message input
-  const [currentMessage, setCurrentMessage] = useState("")
+  const [currentMessage, setCurrentMessage] = useState("");
   
   // Files being uploaded in the current message
-  const [currentFiles, setCurrentFiles] = useState<UploadedFile[]>([])
+  const [currentFiles, setCurrentFiles] = useState<UploadedFile[]>([]);
   
-  // Recording state
-  const [isRecording, setIsRecording] = useState(false)
+  // Audio recording states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showRecordingModal, setShowRecordingModal] = useState(false);
   
-  // Processing state
-  const [isProcessing, setIsProcessing] = useState(false)
+  // Audio refs - Only used client-side
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // File input ref
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Processing state
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Message container ref for scrolling
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto scroll to bottom of messages
+  // Add drag and drop state variables
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Auto scroll to bottom of messages - Client side only
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    if (isHydrated && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isHydrated]);
 
-  // Generate an ID for messages
+  // Generate an ID for messages - Safe for both SSR and CSR
   const generateId = useCallback(() => {
-    return `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-  }, [])
+    if (!isHydrated) {
+      // Server-side or during hydration, use a stable ID
+      return `msg-static-id`;
+    }
+    // Client-side after hydration, use dynamic ID
+    return `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  }, [isHydrated]);
   
-  // Handle creating a new thread
+  // Format date safely for both server and client
+  const formatDate = useCallback((date: Date) => {
+    // Use fixed locale and format options for consistent server/client rendering
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }, []);
+  
+  // Handle creating a new thread - Client-side only
   const handleNewThread = useCallback(() => {
-    const newThreadId = `thread-${Date.now()}`
+    if (!isHydrated) return; // Only run on client
+    
+    const newThreadId = `thread-${Date.now()}`;
+    const formattedDate = formatDate(new Date());
+    
     const newThread: ThreadType = {
       id: newThreadId,
       title: `New Conversation`,
-      date: new Date().toLocaleDateString(),
+      date: formattedDate,
       lastMessage: "Start a new conversation",
       color: "purple",
-    }
+    };
     
-    setThreads(prev => [newThread, ...prev])
-    setActiveThreadId(newThreadId)
+    setThreads(prev => [newThread, ...prev]);
+    setActiveThreadId(newThreadId);
     setMessages([{
       id: "sys-welcome",
       type: "system",
       content: "Hello! I'm your document analysis assistant. Upload files or ask me questions about your documents.",
       timestamp: new Date(),
       sender: "assistant"
-    }])
-    setCurrentFiles([])
-    setCurrentMessage("")
-  }, [])
+    }]);
+    setCurrentFiles([]);
+    setCurrentMessage("");
+  }, [isHydrated, formatDate]);
 
   // Handle selecting a thread  
   const handleSelectThread = useCallback((threadId: string) => {
@@ -211,15 +259,151 @@ export default function ChatDocumentAnalysis() {
     setCurrentFiles(prev => prev.filter(file => file.id !== fileId))
   }, [])
   
-  // Toggle recording
-  const handleToggleRecording = useCallback(() => {
-    setIsRecording(prev => !prev)
+  // Format recording time (mm:ss)
+  const formatRecordingTime = useCallback((seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }, [])
+  
+  // Modified startRecording to only work on client
+  const startRecording = useCallback(async () => {
+    // Only proceed if we're on the client side
+    if (!isHydrated) return;
     
-    // Simulate stopping recording and getting transcription
-    if (isRecording) {
-      setCurrentMessage("Could you analyze these financial documents for key insights?")
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+      
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
+        const audioUrl = URL.createObjectURL(audioBlob)
+        
+        setAudioBlob(audioBlob)
+        setAudioUrl(audioUrl)
+        
+        // Clean up the media stream tracks
+        stream.getTracks().forEach(track => track.stop())
+      }
+      
+      mediaRecorder.start()
+      setIsRecording(true)
+      setShowRecordingModal(true)
+      setRecordingTime(0)
+      
+      // Start a timer to track recording duration
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((prevTime) => prevTime + 1)
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Error accessing microphone:', error)
+      toast({
+        title: "Microphone access denied",
+        description: "Please allow microphone access to record audio.",
+        variant: "destructive"
+      })
+    }
+  }, [isHydrated])
+  
+  // Stop recording
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+      
+      // Clear the recording timer
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current)
+        recordingTimerRef.current = null
+      }
     }
   }, [isRecording])
+  
+  // Cancel recording
+  const cancelRecording = useCallback(() => {
+    stopRecording()
+    setAudioBlob(null)
+    setAudioUrl(null)
+    setShowRecordingModal(false)
+  }, [stopRecording])
+  
+  // Attach the recorded audio to the message
+  const attachRecordedAudio = useCallback(() => {
+    if (audioBlob) {
+      // Create a file from the blob
+      const fileName = `voice-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.wav`
+      const audioFile = new File([audioBlob], fileName, { type: 'audio/wav' })
+      
+      // Create an uploaded file object
+      const newAudioFile: UploadedFile = {
+        id: `audio-${Date.now()}`,
+        name: fileName,
+        size: audioBlob.size,
+        type: 'audio/wav',
+        progress: 100,
+        status: 'complete',
+        url: audioUrl || undefined
+      }
+      
+      // Add to current files
+      setCurrentFiles(prev => [...prev, newAudioFile])
+      
+      // Close the recording modal and reset recording state
+      setShowRecordingModal(false)
+      setAudioBlob(null)
+      setAudioUrl(null)
+    }
+  }, [audioBlob, audioUrl])
+  
+  // Play/pause the recorded audio
+  const toggleAudioPlayback = useCallback(() => {
+    if (audioPlayerRef.current) {
+      if (isPlaying) {
+        audioPlayerRef.current.pause()
+      } else {
+        audioPlayerRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
+  }, [isPlaying])
+  
+  // Handle audio playback ended
+  useEffect(() => {
+    const audioPlayer = audioPlayerRef.current
+    
+    const handleEnded = () => {
+      setIsPlaying(false)
+    }
+    
+    if (audioPlayer) {
+      audioPlayer.addEventListener('ended', handleEnded)
+    }
+    
+    return () => {
+      if (audioPlayer) {
+        audioPlayer.removeEventListener('ended', handleEnded)
+      }
+    }
+  }, [audioUrl])
+  
+  // Toggle recording modal
+  const handleToggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
+  }, [isRecording, startRecording, stopRecording])
   
   // Handle sending a message
   const handleSendMessage = useCallback((e?: React.FormEvent) => {
@@ -297,10 +481,69 @@ export default function ChatDocumentAnalysis() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }, [])
   
-  // Format timestamp
+  // Format timestamp - Ensure consistent formatting between server and client
   const formatTime = useCallback((date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }, [])
+    // Use fixed locale and format for consistent server/client rendering
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true
+    });
+  }, []);
+
+  // Handle drag events for the file upload zone
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!isDraggingOver) {
+      setIsDraggingOver(true);
+    }
+  }, [isDraggingOver]);
+  
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  }, []);
+  
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      // Process the dropped files
+      const newFiles = Array.from(e.dataTransfer.files).map(file => ({
+        id: `file-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        progress: 0,
+        status: "uploading" as const,
+      }));
+      
+      setCurrentFiles(prev => [...prev, ...newFiles]);
+      
+      // Simulate upload progress
+      newFiles.forEach(file => {
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 10;
+          if (progress >= 100) {
+            clearInterval(interval);
+            setCurrentFiles(prev => 
+              prev.map(f => f.id === file.id ? { ...f, progress: 100, status: "complete" } : f)
+            );
+          } else {
+            setCurrentFiles(prev => 
+              prev.map(f => f.id === file.id ? { ...f, progress } : f)
+            );
+          }
+        }, 300);
+      });
+    }
+  }, []);
 
   return (
     <div className="flex h-screen bg-white text-slate-800">
@@ -413,6 +656,30 @@ export default function ChatDocumentAnalysis() {
                             <div className="font-medium truncate">{file.name}</div>
                             <div className="text-xs opacity-75">{formatFileSize(file.size)}</div>
                           </div>
+                          
+                          {/* Audio playback controls - Only rendered client-side after hydration */}
+                          {file.type.includes('audio') && file.url && isHydrated && (
+                            <button 
+                              className="p-1 rounded-full hover:bg-white/20"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                // Client-only code
+                                const audioElement = document.getElementById(`audio-${file.id}`) as HTMLAudioElement;
+                                if (audioElement) {
+                                  if (audioElement.paused) {
+                                    audioElement.play();
+                                  } else {
+                                    audioElement.pause();
+                                  }
+                                }
+                              }}
+                            >
+                              <PlayIcon size={16} />
+                              {isHydrated && <audio id={`audio-${file.id}`} src={file.url} className="hidden" />}
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -428,7 +695,8 @@ export default function ChatDocumentAnalysis() {
               </div>
             ))}
             
-            {isProcessing && (
+            {/* Only render loading indicator on client */}
+            {isProcessing && isHydrated && (
               <div className="flex justify-start">
                 <div className="bg-white border border-slate-200 rounded-lg p-4 max-w-[80%]">
                   <div className="flex items-center space-x-2">
@@ -444,8 +712,8 @@ export default function ChatDocumentAnalysis() {
           </div>
         </div>
         
-        {/* Current files */}
-        {currentFiles.length > 0 && (
+        {/* Current files - Only render on client */}
+        {currentFiles.length > 0 && isHydrated && (
           <div className="p-3 border-t border-slate-200 bg-white">
             <div className="flex flex-wrap gap-2">
               {currentFiles.map(file => (
@@ -506,7 +774,8 @@ export default function ChatDocumentAnalysis() {
                   className="pr-10 py-6 text-base bg-white border-slate-300 rounded-full text-slate-800"
                 />
                 
-                {hasMounted && (
+                {/* Voice recording button - Safe client-side rendering */}
+                {isHydrated && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -533,15 +802,35 @@ export default function ChatDocumentAnalysis() {
         </div>
       </div>
 
-      {/* Right sidebar - Files overview */}
-      <div className="w-72 border-l border-slate-200 flex flex-col bg-slate-50 overflow-hidden">
-        <div className="p-4 border-b border-slate-200">
-          <h3 className="font-medium text-slate-800">Uploaded Files</h3>
+      {/* Right sidebar - Files overview with drag and drop */}
+      <div 
+        className={`w-72 border-l border-slate-200 flex flex-col bg-slate-50 overflow-hidden ${
+          isDraggingOver ? 'bg-purple-50 border-purple-200' : ''
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className={`p-4 border-b ${isDraggingOver ? 'border-purple-200 bg-purple-50' : 'border-slate-200'}`}>
+          <h3 className="font-medium text-slate-800">
+            {isDraggingOver ? 'Drop Files Here' : 'Uploaded Files'}
+          </h3>
         </div>
         
-        <div className="flex-1 overflow-auto p-3">
-          {/* Get all files from messages in the current conversation */}
-          {messages.some(message => message.files && message.files.length > 0) ? (
+        <div className={`flex-1 overflow-auto p-3 transition-colors duration-200 ${
+          isDraggingOver ? 'bg-purple-50' : ''
+        }`}>
+          {isDraggingOver ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-purple-300 rounded-lg">
+              <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-4">
+                <PaperclipIcon size={24} className="text-purple-500" />
+              </div>
+              <h4 className="text-sm font-medium text-purple-700 mb-1">Drop your files here</h4>
+              <p className="text-xs text-purple-600 max-w-[200px]">
+                Files will be attached to your current message
+              </p>
+            </div>
+          ) : messages.some(message => message.files && message.files.length > 0) ? (
             <div className="space-y-3">
               {messages
                 .filter(message => message.files && message.files.length > 0)
@@ -577,48 +866,130 @@ export default function ChatDocumentAnalysis() {
                 ))}
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6">
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-200 rounded-lg">
               <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
                 <FileIcon size={24} className="text-slate-400" />
               </div>
               <h4 className="text-sm font-medium text-slate-700 mb-1">No files yet</h4>
               <p className="text-xs text-slate-500 max-w-[200px]">
-                Attach files to your messages to analyze them and see them here.
+                Drag and drop files here or attach them to your messages.
               </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <PaperclipIcon size={14} className="mr-1" />
+                Browse Files
+              </Button>
             </div>
           )}
         </div>
         
-        <div className="p-3 border-t border-slate-200">
-          <div className="space-y-3">
-            <h4 className="text-xs font-medium text-slate-500 uppercase">Document Analysis Tools</h4>
+        {isDraggingOver && (
+          <div className="p-3 border-t border-purple-200 bg-purple-50">
+            <div className="text-xs text-purple-600 text-center">
+              Release to upload files
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Voice Recording Modal - Only shown after hydration */}
+      {isHydrated && showRecordingModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-slate-800">
+                {isRecording ? "Recording in progress..." : "Recording complete"}
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100"
+                onClick={cancelRecording}
+              >
+                <X size={18} />
+              </Button>
+            </div>
             
-            <button className="w-full flex items-center gap-2 text-sm p-2 rounded-md hover:bg-slate-100 text-left text-slate-700">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-purple-500">
-                <path d="M12 2v6m0 8v6M4.93 10H2v4h2.93M17 17.07V20h4v-2.93M21.07 10H19v4h2.07M7 16.93V14H3v2.93M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Text Extraction
-            </button>
+            <div className="p-6 flex flex-col items-center justify-center bg-slate-50 rounded-lg mb-4 space-y-4">
+              {isRecording ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-red-500/10 border-4 border-red-500 flex items-center justify-center animate-pulse">
+                    <Mic size={32} className="text-red-500" />
+                  </div>
+                  <p className="text-2xl font-mono">{formatRecordingTime(recordingTime)}</p>
+                </>
+              ) : (
+                <>
+                  {audioUrl && (
+                    <div className="w-full">
+                      <div className="flex items-center justify-center gap-4 mb-4">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-10 w-10 rounded-full"
+                          onClick={toggleAudioPlayback}
+                        >
+                          {isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
+                        </Button>
+                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <audio 
+                            ref={audioPlayerRef}
+                            src={audioUrl} 
+                            className="hidden"
+                            onPlay={() => setIsPlaying(true)}
+                            onPause={() => setIsPlaying(false)}
+                          />
+                          {/* We'd need a more complex implementation for proper progress display */}
+                          <div className="bg-purple-500 h-full rounded-full" style={{ width: isPlaying ? '100%' : '0%', transition: 'width 0.2s' }}></div>
+                        </div>
+                      </div>
+                      <p className="text-center text-sm text-slate-500">
+                        {formatRecordingTime(recordingTime)}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             
-            <button className="w-full flex items-center gap-2 text-sm p-2 rounded-md hover:bg-slate-100 text-left text-slate-700">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-blue-500">
-                <path d="M21 14l-5-5-5 5M10 5L5 10 10 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M21 19H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Summarize
-            </button>
-            
-            <button className="w-full flex items-center gap-2 text-sm p-2 rounded-md hover:bg-slate-100 text-left text-slate-700">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-green-500">
-                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Compare Documents
-            </button>
+            <div className="flex gap-2">
+              {isRecording ? (
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={stopRecording}
+                >
+                  <StopCircleIcon size={18} className="mr-2" />
+                  Stop Recording
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={cancelRecording}
+                  >
+                    <TrashIcon size={18} className="mr-2" />
+                    Discard
+                  </Button>
+                  <Button
+                    variant="default"
+                    className="flex-1 bg-purple-600 hover:bg-purple-700"
+                    onClick={attachRecordedAudio}
+                  >
+                    <PaperclipIcon size={18} className="mr-2" />
+                    Attach
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

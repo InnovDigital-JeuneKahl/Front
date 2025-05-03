@@ -12,6 +12,8 @@ import {
   RefreshCwIcon,
   PlayIcon,
   PauseIcon,
+  BarChart,
+  PieChart,
 } from "lucide-react"
 
 export type AnalysisTopic = {
@@ -33,6 +35,17 @@ export type FileAnalysisDetailsProps = {
   onRedoAnalysis?: () => void
 }
 
+// Hook to safely use browser APIs and ensure hydration safety
+function useHydration() {
+  const [hydrated, setHydrated] = useState(false);
+  
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+  
+  return hydrated;
+}
+
 export function FileAnalysisDetails({
   fileId,
   fileName,
@@ -42,16 +55,11 @@ export function FileAnalysisDetails({
   onCheckDocument,
   onRedoAnalysis,
 }: FileAnalysisDetailsProps) {
+  const isHydrated = useHydration();
   const [activeTab, setActiveTab] = useState("topics")
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [highlightedText, setHighlightedText] = useState<string | null>(null)
-  const [hasMounted, setHasMounted] = useState(false)
-
-  // Fix hydration issues by only rendering client-specific content after mounting
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying)
@@ -91,20 +99,16 @@ export function FileAnalysisDetails({
     Totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.
   `
 
-  // If the component hasn't mounted yet, return a simpler placeholder
-  if (!hasMounted) {
+  // Render a simplified placeholder during server rendering
+  if (!isHydrated) {
     return (
-      <div className="flex-1 flex flex-col">
-        <div className="p-4 border-b border-border flex items-center">
-          <h2 className="text-xl font-semibold">
-            <span className="text-muted-foreground mr-2">File:</span> {fileName}
-          </h2>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border-2 border-t-primary border-primary/30 animate-spin"></div>
+      <div className="p-4 bg-white rounded-lg shadow">
+        <h3 className="text-lg font-medium mb-4">File Analysis</h3>
+        <div className="space-y-4">
+          <div className="h-[200px] bg-gray-100 rounded animate-pulse"></div>
         </div>
       </div>
-    )
+    );
   }
 
   return (

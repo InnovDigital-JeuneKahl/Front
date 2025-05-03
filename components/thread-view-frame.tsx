@@ -19,15 +19,21 @@ interface ThreadViewFrameProps {
   onBack: () => void
 }
 
+// Hook to safely use browser APIs and ensure hydration safety
+function useHydration() {
+  const [hydrated, setHydrated] = useState(false);
+  
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+  
+  return hydrated;
+}
+
 export function ThreadViewFrame({ threadId, onBack }: ThreadViewFrameProps) {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false)
   const [userQuery, setUserQuery] = useState("")
-  const [hasMounted, setHasMounted] = useState(false)
-
-  // Fix hydration issues by only rendering once the component has mounted
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
+  const isHydrated = useHydration();
 
   // Mock thread data
   const thread = {
@@ -77,8 +83,8 @@ export function ThreadViewFrame({ threadId, onBack }: ThreadViewFrameProps) {
     setUserQuery("")
   }
 
-  // If the component hasn't mounted yet, return a placeholder to prevent hydration errors
-  if (!hasMounted) {
+  // Show a loading placeholder during server rendering
+  if (!isHydrated) {
     return (
       <div className="flex-1 flex flex-col">
         <div className="p-4 border-b border-border flex items-center">
