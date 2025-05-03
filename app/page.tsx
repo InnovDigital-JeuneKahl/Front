@@ -25,15 +25,19 @@ const navLinks = [
   { label: "Pricing", href: "#" },
 ];
 
+const missionContent = {
+  title: "Our Mission",
+  heading: "We focus on the efficiency of freight networks\nensuring sustained success for our partners",
+};
+
 const heroContent = {
-  title: "Clarity in your data.",
-  subtitle: "Power in your decisions",
-  description:
-    "At Freightmate, we believe that organization is the cornerstone of optimization. Our PMS and TMS are meticulously designed to streamline operations to move swiftly and efficiently in the complex world of logistics.",
+  title: missionContent.title,
+  subtitle: missionContent.heading,
+  description: "",
   cta: {
-    text: "Press",
-    key: "⏎",
-    suffix: "any time to get Started",
+    text: "Get Started",
+    key: "",
+    suffix: "",
   },
 };
 
@@ -52,7 +56,7 @@ const features = [
     title: "Benefit from the best technologies",
     titleClass: "text-indigo-800",
     description:
-      "Freightmee revolutionizes logistics with seamless carrier collaboration, eliminating IT hassles. Swiftly allocate trucks and drivers with feedback for efficient operations.",
+      "Freight networks thrive on efficiency. Doxa empowers your operations with seamless technology and collaboration.",
     reverse: false,
   },
   {
@@ -64,7 +68,7 @@ const features = [
     title: "The new way to drive your loading",
     titleClass: "text-pink-600 text-right md:text-left",
     description:
-      "Total control of all your loads, to save you time, focus your efforts on the essentials and offer your customers an optimal quality of service.",
+      "Gain total control of your loads, save time, and deliver optimal service to your customers.",
     reverse: true,
   },
   {
@@ -76,7 +80,7 @@ const features = [
     title: "Set up and manage an agile transport",
     titleClass: "text-indigo-800",
     description:
-      "Freightmee offers a versatile transportation plan, managing daily and weekly volumes with ease. Empower your teams with dedicated support, and efficiently monitor quality to satisfy carriers and ensure optimized logistics.",
+      "Doxa helps you manage daily and weekly volumes with ease, supporting your teams and optimizing logistics.",
     reverse: false,
   },
 ];
@@ -84,21 +88,21 @@ const features = [
 const testimonials = [
   {
     logo: "https://placehold.co/200x80?text=Logo+1",
-    text: "“FreightMee Is A Logistics Superhero! Their Tracking Is Like Magic, And The Team Is Always Ready With A Friendly High-Five.”",
+    text: "Doxa is a logistics superhero! Their tracking is like magic, and the team is always ready to help.",
     userImg: "https://placehold.co/100x100?text=User+1",
     userName: "Wadji Boumenjel",
     userTitle: "CEO Of Logoipsum",
   },
   {
     logo: "https://placehold.co/200x80?text=Logo+2",
-    text: "“FreightMee helped us scale our operations with ease. Their support team is fantastic!”",
+    text: "Doxa helped us scale our operations with ease. Their support team is fantastic!",
     userImg: "https://placehold.co/100x100?text=User+2",
     userName: "Jane Doe",
     userTitle: "COO Of LogiPro",
   },
   {
     logo: "https://placehold.co/200x80?text=Logo+3",
-    text: "“The analytics dashboard is a game changer for our business.”",
+    text: "The analytics dashboard is a game changer for our business.",
     userImg: "https://placehold.co/100x100?text=User+3",
     userName: "John Smith",
     userTitle: "Logistics Manager",
@@ -177,9 +181,9 @@ const CtaBanner = () => {
         <div>
           <h2 className="text-2xl font-semibold mb-3">We are at your disposal</h2>
           <div className="flex items-center gap-6 text-base mt-4 text-gray-300 flex-wrap">
-            <span>📞 +213 770 80 80 00</span>
-            <span>✉️ contact@freightmee.com</span>
-            <span>📍 340 Rue Dar El Heddad, Les Pins Maritimes, Mohammadia, Alger</span>
+            <span>📞 +213 770 10 20 00</span>
+            <span>✉️ contact@doxa.com</span>
+            <span>CYBER SPACE, LES ALGER, ALGERIA</span>
           </div>
         </div>
         <Link href="/signup" className="bg-pink-500 hover:bg-pink-600 text-white font-semibold px-8 py-4 text-lg rounded-full transition-all">
@@ -195,7 +199,7 @@ const CtaBanner = () => {
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-12">
           {/* Logo */}
           <div className="col-span-2 md:col-span-1">
-            <Image src={Logo} alt="FreightMee Logo" className="w-40 mb-6" />
+            <Image src={Logo} alt="Doxa Logo" className="w-40 mb-6" width={160} height={40} />
           </div>
   
           {/* Links */}
@@ -222,8 +226,8 @@ const CtaBanner = () => {
           <div>
             <h4 className="font-semibold text-lg mb-4">Resources</h4>
             <ul className="space-y-2 text-base">
-              <li>Blog</li>
-              <li>Q&A</li>
+              <li>Blogs</li>
+              <li>Q&As</li>
               <li>Medium</li>
             </ul>
           </div>
@@ -232,7 +236,6 @@ const CtaBanner = () => {
           <div className="col-span-2 md:col-span-1 flex items-start md:items-end justify-start md:justify-end">
             <select className="border rounded px-4 py-2 text-base">
               <option value="en">🇬🇧 English</option>
-              <option value="fr">🇫🇷 French</option>
             </select>
           </div>
         </div>
@@ -243,7 +246,7 @@ const CtaBanner = () => {
             <a href="#" className="hover:text-indigo-600">LinkedIn</a>
             <a href="#" className="hover:text-indigo-600">Instagram</a>
           </div>
-          <p>© 2024 Freightmee. All rights reserved.</p>
+          <p>©2024 Doxa. All Rights Reserved.</p>
         </div>
       </footer>
     );
@@ -278,23 +281,9 @@ const LandingPage = () => {
 
       {/* Hero */}
       <section className="text-center my-20 max-w-5xl px-6">
-        <h1 className="text-6xl font-bold mb-4">{heroContent.title}</h1>
-        <h2 className="text-6xl text-indigo-800 font-bold mb-8">
-          {heroContent.subtitle}
-        </h2>
-        <p className="text-gray-600 text-xl mb-10 max-w-4xl mx-auto leading-relaxed">{heroContent.description}</p>
-        <Link href="/signup" className="inline-block bg-indigo-700 text-white px-8 py-4 text-xl rounded-full shadow-lg hover:bg-indigo-800 transition-colors">
-          {heroContent.cta.text} <kbd className="mx-1 px-2 py-1 bg-indigo-800 rounded">{heroContent.cta.key}</kbd> {heroContent.cta.suffix}
-        </Link>
-        <div className="mt-16 shadow-xl rounded-xl overflow-hidden">
-          <Image
-            src={Hero}
-            alt={dashboardPreview.alt}
-            className="w-full"
-            width={1200}
-            height={600}
-          />
-        </div>
+        <h2 className="text-lg font-semibold mb-2 text-purple-300">{missionContent.title}</h2>
+        <h1 className="text-4xl md:text-5xl font-bold mb-8 whitespace-pre-line">{missionContent.heading}</h1>
+        <Image src={Hero} alt="Hero"></Image>
       </section>
 
       {/* Features */}

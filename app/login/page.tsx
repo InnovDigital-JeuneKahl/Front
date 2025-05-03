@@ -66,7 +66,7 @@ export default function AuthPage() {
         <div className="relative w-full md:w-1/2 h-64 md:h-auto">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/80 to-background/90 z-10 flex flex-col justify-between p-8">
             <div>
-              <h2 className="text-2xl font-bold text-black">AMU</h2>
+              <h2 className="text-2xl font-bold text-black">DOXA</h2>
             </div>
             <div className="mb-8">
               <h3 className="text-2xl font-bold text-black mb-2">Capturing Moments,</h3>
