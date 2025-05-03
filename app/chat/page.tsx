@@ -1103,14 +1103,10 @@ const attachRecordedAudio = useCallback(() => {
           url: audioUrl || undefined
         };
         
-        // Add to current files
-        setCurrentFiles(prev => [...prev, newAudioFile]);
-        
         // Close the recording modal and reset recording state
         setShowRecordingModal(false);
         setAudioBlob(null);
         setAudioUrl(null);
-        setIsProcessing(false);
         
         // Create and send a message with the transcription
         const newMessage: Message = {
@@ -1139,9 +1135,6 @@ const attachRecordedAudio = useCallback(() => {
             }))
           }
         };
-        
-        // Show processing state
-        setIsProcessing(true);
         
         // Send directly to the backend instead of calling handleSendMessage
         keywordSearchWithQuery(
@@ -1221,6 +1214,7 @@ const attachRecordedAudio = useCallback(() => {
           variant: "destructive"
         });
         
+        // Create an uploaded file object for the message
         const newAudioFile: UploadedFile = {
           id: `audio-${Date.now()}`,
           name: fileName,
@@ -1231,7 +1225,18 @@ const attachRecordedAudio = useCallback(() => {
           url: audioUrl || undefined
         };
         
-        setCurrentFiles(prev => [...prev, newAudioFile]);
+        // Create and send a message with just the audio file
+        const newMessage: Message = {
+          id: generateId(),
+          type: "file",
+          content: "Audio recording",
+          timestamp: new Date(),
+          sender: "user",
+          files: [newAudioFile]
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+        
         setShowRecordingModal(false);
         setAudioBlob(null);
         setAudioUrl(null);
