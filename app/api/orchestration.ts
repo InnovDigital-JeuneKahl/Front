@@ -386,3 +386,190 @@ export async function listAvailableModels(): Promise<ModelsResponse> {
     throw error;
   }
 } 
+
+/**
+ * Response from the audio transcription endpoint - updated to match actual API response
+ */
+export interface TranscriptionResponse {
+  transcription: string;
+  language_probability: number;
+  processing_time: number;
+  
+}
+
+/**
+ * Transcribe an audio recording
+ * @param audioFile The audio file to transcribe
+ * @param customMetadata Optional custom metadata to include with the transcription request
+ * @returns Transcription response from the backend
+ */
+export async function transcribeAudioRecording(
+  audioFile: File, 
+  customMetadata?: {
+    speaker?: string;
+    meeting_id?: string;
+  }
+): Promise<TranscriptionResponse> {
+  try {
+    // Create form data to send the file and metadata
+    const formData = new FormData();
+    formData.append('file', audioFile);
+    
+    // Create default metadata that will be overridden by any custom values
+    const metadata = {
+      speaker: customMetadata?.speaker || "Unknown Speaker",
+      meeting_id: customMetadata?.meeting_id || `meeting-${Date.now()}`,
+    };
+    
+    // Add metadata as JSON string
+    formData.append('metadata', JSON.stringify(metadata));
+    
+    // Send the request
+    const response = await fetchWithAuth(`${BASE_URL}/audio/transcribe`, {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type header as the browser will set it correctly with the boundary for multipart/form-data
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to transcribe audio');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error transcribing audio:', error);
+    throw error;
+  }
+}
+
+/**
+ * Response for the question endpoint that accepts file uploads
+ */
+export interface FileQuestionResponse {
+  question: string;
+  answer: {
+    response: string;
+    model: string;
+    sources: Array<{
+      id: number;
+      chunk_id: string;
+      content_snippet: string;
+    }>;
+  };
+  file_info: {
+    filename: string;
+    file_type: string;
+    size_bytes: number;
+  };
+  relevant_passages?: Array<{
+    content: string;
+    chunk_id: string;
+    score: number;
+  }>;
+}
+
+/**
+ * Response for the keyword search endpoint
+ */
+export interface KeywordSearchResponse {
+  query: string;
+  results: Array<{
+    content: string;
+    chunk_id: string;
+    metadata: Record<string, any>;
+    score: number;
+  }>;
+  response: string;
+  keywords: string[];
+  model: string;
+}
+
+/**
+ * Ask a question about uploaded files
+ * @param files The files to ask a question about
+ * @param question The question to ask
+ * @param metadata Optional metadata to include with the request
+ * @returns Response from the backend
+ */
+export async function askQuestionWithFiles(
+  files: File[],
+  question: string,
+  metadata?: Record<string, any>
+): Promise<FileQuestionResponse> {
+  try {
+    // Create form data for the multipart/form-data request
+    const formData = new FormData();
+    
+    // Add each file to the FormData
+    files.forEach(file => {
+      formData.append('file', file);
+    });
+    
+    // Add the question if provided
+    if (question.trim()) {
+      formData.append('question', question);
+    }
+    
+    // Add metadata if provided
+    if (metadata) {
+      formData.append('metadata', JSON.stringify(metadata));
+    }
+    
+    // Send the request to the question endpoint with files
+    const response = await fetchWithAuth(`${BASE_URL}/question`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Failed to process question (${response.status})`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error asking question with files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Perform keyword search with a query
+ * @param query The query text
+ * @param keywords Keywords to search for
+ * @param filterMetadata Optional metadata filters
+ * @param model Optional model to use for processing
+ * @returns Keyword search results
+ */
+export async function keywordSearchWithQuery(
+  query: string,
+  keywords: string[],
+  filterMetadata?: Record<string, any>,
+  model: string = "qwen2.5:3b-instruct"
+): Promise<KeywordSearchResponse> {
+  try {
+    const response = await fetchWithAuth(`${BASE_URL}/keyword-search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        keywords,
+        filter_metadata: filterMetadata,
+        model
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Failed to perform keyword search (${response.status})`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error performing keyword search:', error);
+    throw error;
+  }
+}

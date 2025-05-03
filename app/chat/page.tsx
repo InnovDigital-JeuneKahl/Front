@@ -15,6 +15,8 @@ import { FilePreview } from "../components/file-preview"
 import { cn } from "../../lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { SearchBar } from "../../components/search-bar"
+// Add this import at the top of your file
+import { transcribeAudioRecording, askQuestionWithFiles, keywordSearchWithQuery } from "../api/orchestration";
 
 // Icons
 import { 
@@ -59,6 +61,7 @@ import {
   createMetadataFromChatContext,
 } from "../utils/orchestration-service"
 import { FileMetadata } from "../api/orchestration"
+import { tr } from "date-fns/locale"
 
 // Message types
 type MessageType = 'text' | 'file' | 'analysis-result' | 'system'
@@ -84,6 +87,8 @@ interface Message {
     }
   }
 }
+
+
 
 interface UploadedFile {
   id: string
@@ -111,6 +116,17 @@ type ThreadType = {
   date: string
   lastMessage: string
   color: keyof typeof threadColors
+}
+export interface Trans  {
+  full_text: string;
+  language: string;  // Fixed typo in 'language'
+  segments:Array<{
+    end: number;
+    start: number;
+    text: string;
+  }>;
+  language_probability: number;
+  processing_time: number;
 }
 
 // Predefined colors to avoid hydration issues with dynamic classname construction
@@ -312,6 +328,9 @@ const MessageItem = memo(({ message, onAudioPlay, playingAudioId, isHydrated }: 
 export default function ChatDocumentAnalysis() {
   // Use hydration hook to safely detect client-side rendering
   const isHydrated = useHydration();
+  
+  // Add inputRef at the component level so it can be accessed by handleSendMessage
+  const inputRef = useRef<HTMLInputElement>(null);
   
   // IMPORTANT: Initial messages with deterministic IDs for server rendering
   const initialMessages = [
@@ -608,33 +627,7 @@ export default function ChatDocumentAnalysis() {
     setShowRecordingModal(false)
   }, [stopRecording])
   
-  // Attach the recorded audio to the message
-  const attachRecordedAudio = useCallback(() => {
-    if (audioBlob) {
-      // Create a file from the blob
-      const fileName = `voice-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.wav`
-      const audioFile = new File([audioBlob], fileName, { type: 'audio/wav' })
-      
-      // Create an uploaded file object
-      const newAudioFile: UploadedFile = {
-        id: `audio-${Date.now()}`,
-        name: fileName,
-        size: audioBlob.size,
-        type: 'audio/wav',
-        progress: 100,
-        status: 'complete',
-        url: audioUrl || undefined
-      }
-      
-      // Add to current files
-      setCurrentFiles(prev => [...prev, newAudioFile])
-      
-      // Close the recording modal and reset recording state
-      setShowRecordingModal(false)
-      setAudioBlob(null)
-      setAudioUrl(null)
-    }
-  }, [audioBlob, audioUrl])
+
   
   // Play/pause the recorded audio
   const toggleAudioPlayback = useCallback(() => {
@@ -687,174 +680,188 @@ export default function ChatDocumentAnalysis() {
     extractText
   } = useOrchestration();
 
-  // Update the handleSendMessage function to use the orchestration hook
-  const handleSendMessage = useCallback(async (e?: React.FormEvent) => {
-    e?.preventDefault()
-    
-    // Get the message text directly from the input field
-    const messageText = e?.target && (e.target as HTMLFormElement).querySelector('input')?.value || '';
-    
-    // Don't send empty messages unless files are attached
-    if (!messageText.trim() && currentFiles.length === 0) return
-    
-    // Add user message to chat
-    const newMessage: Message = {
-      id: generateId(),
-      type: currentFiles.length > 0 ? "file" : "text",
-      content: messageText,
-      timestamp: new Date(),
-      sender: "user",
-      files: currentFiles.length > 0 ? [...currentFiles] : undefined
-    }
-    
-    setMessages(prev => [...prev, newMessage])
-    setCurrentMessage("")  // Keep this for state consistency, although we're not using it for the input
-    setCurrentFiles([])
-    setIsProcessing(true)
-    
+  // Update the handleSendMessage function to use the orchestration functions
+const handleSendMessage = useCallback(async (e?: React.FormEvent) => {
+  e?.preventDefault();
+
+  // Get the message text directly from the input field
+  const messageText = inputRef.current?.value || '';
+  
+  // Don't send empty messages unless files are attached
+  if (!messageText.trim() && currentFiles.length === 0) return;
+  
+  // Add user message to chat
+  const newMessage: Message = {
+    id: generateId(),
+    type: currentFiles.length > 0 ? "file" : "text",
+    content: messageText,
+    timestamp: new Date(),
+    sender: "user",
+    files: currentFiles.length > 0 ? [...currentFiles] : undefined
+  };
+  
+  setMessages(prev => [...prev, newMessage]);
+  
+  // Clear the input field
+  if (inputRef.current) {
+    inputRef.current.value = "";
+  }
+  
+  setCurrentFiles([]);
+  setIsProcessing(true);
+  
+  try {
     // Get the current thread title for metadata
-    const currentThreadTitle = threads.find(t => t.id === activeThreadId)?.title || "New Conversation"
+    const currentThreadTitle = threads.find(t => t.id === activeThreadId)?.title || "New Conversation";
     
-    try {
-      // Check if files are attached - process them with orchestration service
-      if (newMessage.files && newMessage.files.length > 0) {
-        // In a real implementation, you would have actual File objects
-        // For this simulation, we'll create dummy File objects based on our UploadedFile objects
-        const dummyFiles: File[] = newMessage.files.map(file => {
-          // This is a simplified mock - in a real app, you'd use actual File objects
-          return new File(
-            [new Blob([''], { type: file.type })], // Empty content for simulation
-            file.name,
-            { type: file.type }
-          );
-        });
-        
-        // For simulation purposes, we'll delay to simulate processing
-        setTimeout(async () => {
-          // In a real implementation, this would process actual files
-          // const result = await processFiles(dummyFiles, currentThreadTitle);
-          
-          // For simulation, we'll generate a response based on file types
-          const fileTypes = newMessage.files?.map(f => f.type) || [];
-          const containsPdf = fileTypes.some(type => type.includes('pdf'));
-          const containsAudio = fileTypes.some(type => type.includes('audio'));
-          
-          let analysisContent = "";
-          
-          if (containsPdf) {
-            analysisContent = "I've analyzed your PDF files and found some interesting insights. The financial report shows a 15% growth in Q3, and the market analysis indicates potential expansion opportunities in the Asian market.";
-          } else if (containsAudio) {
-            analysisContent = "I've transcribed and analyzed your audio files. The meeting recording contains important discussions about the upcoming product launch timeline and marketing strategy adjustments based on last quarter's results.";
-          } else {
-            analysisContent = "I've processed your files and extracted the key information. The documents contain details about project timelines, resource allocation, and strategic goals for the next fiscal year.";
-          }
-          
-          // Add insights to the relevant files
-          const updatedFiles = newMessage.files?.map(file => ({
-            ...file,
-            analysisReady: true
-          }));
-          
-          // Update the message with processed files
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === newMessage.id 
-                ? { ...msg, files: updatedFiles }
-                : msg
-            )
-          );
-          
-          // Add assistant response
-          const assistantMessage: Message = {
-            id: generateId(),
-            type: "analysis-result",
-            content: analysisContent,
-            timestamp: new Date(),
-            sender: "assistant",
-            analysisResults: {
-              keyPoints: [
-                "Revenue increased by 15% compared to previous quarter",
-                "Market expansion opportunities identified in Asian markets",
-                "Product line diversification recommended for Q4",
-                "Cost reduction initiatives showing positive results"
-              ],
-              sentiment: "positive",
-              confidence: 0.92
-            }
-          };
-          
-          setMessages(prev => [...prev, assistantMessage]);
-          setIsProcessing(false);
-          
-          // Update thread title and last message if this is a new conversation
-          if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
-            const fileNames = newMessage.files?.map(f => f.name).join(", ") || "";
-            const truncatedTitle = fileNames.length > 30 
-              ? fileNames.slice(0, 30) + "..."
-              : fileNames;
-            
-            setThreads(prev => prev.map(thread => 
-              thread.id === activeThreadId 
-                ? { 
-                    ...thread, 
-                    title: `Analysis of ${truncatedTitle}`,
-                    lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
-                  } 
-                : thread
-            ));
-          }
-        }, 2000);
-      } else {
-        // For text questions, we would use askQuestionOrchestration, but here we'll simulate
-        setTimeout(() => {
-          const assistantMessage: Message = {
-            id: generateId(),
-            type: "text",
-            content: "Based on the documents you've shared previously, I'd recommend focusing on the financial projections in section 3. The growth targets seem ambitious but achievable given the market conditions outlined in the report.",
-            timestamp: new Date(),
-            sender: "assistant",
-          };
-          
-          setMessages(prev => [...prev, assistantMessage]);
-          setIsProcessing(false);
-          
-          // Update thread title and last message if this is a new conversation
-          if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
-            setThreads(prev => prev.map(thread => 
-              thread.id === activeThreadId 
-                ? { 
-                    ...thread, 
-                    title: messageText.slice(0, 30) + (messageText.length > 30 ? "..." : ""),
-                    lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
-                  } 
-                : thread
-            ));
-          }
-        }, 2000);
+    // Create metadata for the request
+    const metadata = {
+      author: "User",
+      additional_metadata: {
+        thread_id: activeThreadId,
+        thread_title: currentThreadTitle,
+        chat_context: messages.slice(-5).map(msg => ({
+          role: msg.sender,
+          content: msg.content
+        }))
       }
-    } catch (error) {
-      console.error("Error processing message with orchestration service:", error);
+    };
+    
+    let result;
+    
+    // Check if files are attached
+    if (newMessage.files && newMessage.files.length > 0) {
+      // Convert the UploadedFile objects to actual File objects
+      const filesToSend = await Promise.all(newMessage.files.map(async file => {
+        // For files that were drag-dropped or selected via file input
+        if (file.url && file.url.startsWith('blob:')) {
+          // Fetch the blob from the URL
+          const response = await fetch(file.url);
+          const blob = await response.blob();
+          return new File([blob], file.name, { type: file.type });
+        } 
+        // For audio recordings
+        else if (file.type.includes('audio') && audioBlob) {
+          return new File([audioBlob], file.name, { type: file.type });
+        }
+        // Fallback - empty file
+        return new File([new Blob()], file.name, { type: file.type });
+      }));
       
-      // Add error message
-      const errorMessage: Message = {
-        id: generateId(),
-        type: "system",
-        content: "Sorry, there was an error processing your request. Please try again.",
-        timestamp: new Date(),
-        sender: "assistant",
-      };
+      // Use the orchestration function for files + question
+      result = await askQuestionWithFiles(
+        filesToSend,
+        messageText,
+        metadata
+      );
       
-      setMessages(prev => [...prev, errorMessage]);
-      setIsProcessing(false);
-      
-      // Show toast notification
-      toast({
-        title: "Error",
-        description: "Failed to process your request",
-        variant: "destructive",
-      });
+    } else {
+      // For text-only questions, use the keyword search orchestration function
+      result = await keywordSearchWithQuery(
+        messageText,
+        extractKeywords(messageText),
+        {
+          thread_id: activeThreadId
+        }
+      );
     }
-  }, [currentFiles, generateId, activeThreadId, threads]);
+    
+    // Create assistant response message with type-safe checks
+    const assistantMessage: Message = {
+      id: generateId(),
+      type: "text",
+      content: "I processed your request, but no direct response was generated.",
+      timestamp: new Date(),
+      sender: "assistant",
+    };
+    
+    // Handle different response formats safely
+    if ('answer' in result && result.answer?.response) {
+      assistantMessage.content = result.answer.response;
+    } else if ('response' in result && result.response) {
+      assistantMessage.content = result.response;
+    }
+    
+    // Add analysis results if available
+    if (assistantMessage.analysisResults === undefined) {
+      assistantMessage.analysisResults = { keyPoints: [] };
+    }
+    
+    // Handle different passage formats safely
+    if ('relevant_passages' in result && result.relevant_passages) {
+      assistantMessage.analysisResults.keyPoints = result.relevant_passages.map(
+        (passage: any) => passage.content || passage.text
+      );
+    } else if ('answer' in result && result.answer?.sources) {
+      assistantMessage.analysisResults.keyPoints = result.answer.sources.map(
+        (source: any) => source.content_snippet
+      );
+    } else if ('results' in result && result.results) {
+      assistantMessage.analysisResults.keyPoints = result.results.map(
+        (item: any) => item.content
+      );
+    }
+    
+    // Add the response to the chat
+    setMessages(prev => [...prev, assistantMessage]);
+    
+    // Update thread title and last message if this is a new conversation
+    if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
+      const newTitle = messageText.slice(0, 30) + (messageText.length > 30 ? "..." : "");
+      
+      setThreads(prev => prev.map(thread => 
+        thread.id === activeThreadId 
+          ? { 
+              ...thread, 
+              title: newTitle,
+              lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
+            } 
+          : thread
+      ));
+    }
+    
+  } catch (error) {
+    console.error("Error processing message:", error);
+    
+    // Add error message
+    const errorMessage: Message = {
+      id: generateId(),
+      type: "system",
+      content: "Sorry, there was an error processing your request. Please try again.",
+      timestamp: new Date(),
+      sender: "assistant",
+    };
+    
+    setMessages(prev => [...prev, errorMessage]);
+    
+    // Show toast notification
+    toast({
+      title: "Error",
+      description: "Failed to process your request",
+      variant: "destructive",
+    });
+  } finally {
+    setIsProcessing(false);
+  }
+}, [currentFiles, generateId, activeThreadId, threads, messages, audioBlob, inputRef]);
+
+// Helper function to extract keywords from a message
+const extractKeywords = (text: string): string[] => {
+  if (!text) return [];
+  
+  // Remove common stop words and punctuation
+  const stopWords = ["the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by", "about", "as"];
+  
+  // Split text into words, remove punctuation, convert to lowercase
+  const words = text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !stopWords.includes(word));
+  
+  // Return unique keywords
+  return [...new Set(words)];
+};
   
   // Get file icon based on file type
   const getFileIcon = useCallback((fileType: string) => {
@@ -1046,6 +1053,192 @@ export default function ChatDocumentAnalysis() {
     }
   }, [messages, generateId]);
 
+// Fix the attachRecordedAudio function
+const attachRecordedAudio = useCallback(() => {
+  if (audioBlob) {
+    // Create a file from the blob
+    const fileName = `voice-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.wav`;
+    const audioFile = new File([audioBlob], fileName, { type: 'audio/wav' });
+    
+    // Set processing state to show user something is happening
+    setIsProcessing(true);
+    
+    // Call the transcription service
+    transcribeAudioRecording(audioFile, {
+      speaker: "User", 
+      meeting_id: `chat-${activeThreadId}`
+    })
+      .then(result => {
+        console.log('API response:', result);
+        
+        let transcriptionText = "No transcription available";
+        
+        try {
+          // Get the transcription string from the API response
+          if (result.transcription) {
+            // Fix the JSON string format (replace single quotes with double quotes)
+            const fixedJsonString = result.transcription
+            .replace(/([{,]\s*)'([^']+)'\s*:/g, '$1"$2":') // keys
+            .replace(/:\s*'([^']*)'/g, ': "$1"');           // string values
+    
+            const transcriptionData = JSON.parse(fixedJsonString);
+            transcriptionText = transcriptionData.full_text || transcriptionText;
+          }
+          
+          console.log('Extracted transcription:', transcriptionText);
+        } catch (error) {
+          console.error('Error parsing transcription JSON:', error);
+          // In case of parsing error, use a default message
+          transcriptionText = "Error parsing transcription";
+        }
+        
+        // Create your file and add it to the current files
+        const newAudioFile: UploadedFile = {
+          id: `audio-${Date.now()}`,
+          name: fileName,
+          size: audioBlob.size,
+          type: 'audio/wav',
+          progress: 100,
+          status: 'complete',
+          url: audioUrl || undefined
+        };
+        
+        // Add to current files
+        setCurrentFiles(prev => [...prev, newAudioFile]);
+        
+        // Close the recording modal and reset recording state
+        setShowRecordingModal(false);
+        setAudioBlob(null);
+        setAudioUrl(null);
+        setIsProcessing(false);
+        
+        // Create and send a message with the transcription
+        const newMessage: Message = {
+          id: generateId(),
+          type: "file",
+          content: transcriptionText,
+          timestamp: new Date(),
+          sender: "user",
+          files: [newAudioFile]
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+        
+        // Get the thread metadata
+        const currentThreadTitle = threads.find(t => t.id === activeThreadId)?.title || "New Conversation";
+        
+        // Create metadata for the request
+        const metadata = {
+          author: "User",
+          additional_metadata: {
+            thread_id: activeThreadId,
+            thread_title: currentThreadTitle,
+            chat_context: messages.slice(-5).map(msg => ({
+              role: msg.sender,
+              content: msg.content
+            }))
+          }
+        };
+        
+        // Show processing state
+        setIsProcessing(true);
+        
+        // Send directly to the backend instead of calling handleSendMessage
+        keywordSearchWithQuery(
+          transcriptionText,
+          extractKeywords(transcriptionText),
+          {
+            thread_id: activeThreadId
+          }
+        )
+          .then(result => {
+            // Create assistant response message
+            const assistantMessage: Message = {
+              id: generateId(),
+              type: "text",
+              content: result.response || "I processed your request, but no direct response was generated.",
+              timestamp: new Date(),
+              sender: "assistant",
+              analysisResults: { keyPoints: [] }
+            };
+            
+            // Add any relevant passages as key points
+            if (result.results) {
+              assistantMessage.analysisResults.keyPoints = result.results.map(
+                item => item.content
+              );
+            }
+            
+            // Add the response to the chat
+            setMessages(prev => [...prev, assistantMessage]);
+            
+            // Update thread title if needed
+            if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
+              const newTitle = transcriptionText.slice(0, 30) + (transcriptionText.length > 30 ? "..." : "");
+              
+              setThreads(prev => prev.map(thread => 
+                thread.id === activeThreadId 
+                  ? { 
+                      ...thread, 
+                      title: newTitle,
+                      lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
+                    } 
+                  : thread
+              ));
+            }
+          })
+          .catch(error => {
+            console.error("Error processing voice message:", error);
+            
+            // Add error message
+            const errorMessage: Message = {
+              id: generateId(),
+              type: "system",
+              content: "Sorry, there was an error processing your request. Please try again.",
+              timestamp: new Date(),
+              sender: "assistant",
+            };
+            
+            setMessages(prev => [...prev, errorMessage]);
+            
+            // Show toast notification
+            toast({
+              title: "Error",
+              description: "Failed to process your voice message",
+              variant: "destructive",
+            });
+          })
+          .finally(() => {
+            setIsProcessing(false);
+          });
+      })
+      .catch(error => {
+        console.error('Error transcribing audio:', error);
+        // Error handling code stays the same
+        toast({
+          title: "Transcription failed",
+          description: "Could not transcribe your audio. Please try again.",
+          variant: "destructive"
+        });
+        
+        const newAudioFile: UploadedFile = {
+          id: `audio-${Date.now()}`,
+          name: fileName,
+          size: audioBlob.size,
+          type: 'audio/wav',
+          progress: 100,
+          status: 'complete',
+          url: audioUrl || undefined
+        };
+        
+        setCurrentFiles(prev => [...prev, newAudioFile]);
+        setShowRecordingModal(false);
+        setAudioBlob(null);
+        setAudioUrl(null);
+        setIsProcessing(false);
+      });
+  }
+}, [audioBlob, audioUrl, activeThreadId, generateId, threads, messages, extractKeywords]);
   // Add a function to handle file preview
   const handleFilePreview = useCallback((fileId: string) => {
     // Find the file in messages
@@ -1070,7 +1263,8 @@ export default function ChatDocumentAnalysis() {
   // Replace the entire MessageInput component with this new version
   const MessageInput = () => {
     // Use a ref instead of state for the input field
-    const inputRef = useRef<HTMLInputElement>(null);
+    // Remove the inputRef from here since we're using the one from the parent
+    // const inputRef = useRef<HTMLInputElement>(null);
     
     // Add a state for file upload progress
     const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
@@ -1081,7 +1275,7 @@ export default function ChatDocumentAnalysis() {
       
       // Get the value directly from the input element
       const message = inputRef.current?.value || "";
-      
+      console.log("Message to send:", message);
       // Don't send empty messages unless files are attached
       if (!message.trim() && currentFiles.length === 0) return;
       
