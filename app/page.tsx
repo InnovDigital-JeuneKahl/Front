@@ -6,6 +6,12 @@ import Link from "next/link";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation, Pagination, A11y } from "swiper/modules";
 import Marquee from "react-fast-marquee";
+import Logo from "../public/Logo.svg";
+import Hero from "../public/Hero.svg";
+import img1 from "../public/2-1.svg";
+import img2 from "../public/2-2.svg";
+import img3 from "../public/2-3.svg";
+import Image from "next/image";
 
 import "swiper/css";
 import "swiper/css/navigation";
@@ -39,9 +45,9 @@ const dashboardPreview = {
 const features = [
   {
     img: {
-      src: "https://placehold.co/480x320?text=Analytics+Chart",
+      src: img1,
       alt: "Analytics Chart",
-      className: "rounded-xl shadow-lg border-2 border-[#e9d8fd] bg-[#f5f3ff] p-4 w-full",
+      className: "w-full h-auto",
     },
     title: "Benefit from the best technologies",
     titleClass: "text-indigo-800",
@@ -51,9 +57,9 @@ const features = [
   },
   {
     img: {
-      src: "https://placehold.co/480x320?text=Shipments+Card",
+      src: img2,
       alt: "Shipments Card",
-      className: "rounded-xl shadow-lg border-2 border-[#fbcfe8] bg-[#fdf2f8] p-4 w-full",
+      className: "w-full h-auto",
     },
     title: "The new way to drive your loading",
     titleClass: "text-pink-600 text-right md:text-left",
@@ -63,9 +69,9 @@ const features = [
   },
   {
     img: {
-      src: "https://placehold.co/480x320?text=Working+Times",
+      src: img3,
       alt: "Working Times",
-      className: "rounded-xl shadow-lg border-2 border-[#e9d8fd] bg-[#f5f3ff] p-4 w-full",
+      className: "w-full h-auto",
     },
     title: "Set up and manage an agile transport",
     titleClass: "text-indigo-800",
@@ -77,23 +83,23 @@ const features = [
 
 const testimonials = [
   {
-    logo: "https://placehold.co/160x60?text=logoipsum",
+    logo: "https://placehold.co/200x80?text=Logo+1",
     text: "“FreightMee Is A Logistics Superhero! Their Tracking Is Like Magic, And The Team Is Always Ready With A Friendly High-Five.”",
-    userImg: "https://randomuser.me/api/portraits/men/32.jpg",
+    userImg: "https://placehold.co/100x100?text=User+1",
     userName: "Wadji Boumenjel",
     userTitle: "CEO Of Logoipsum",
   },
   {
-    logo: "https://placehold.co/160x60?text=logoipsum2",
+    logo: "https://placehold.co/200x80?text=Logo+2",
     text: "“FreightMee helped us scale our operations with ease. Their support team is fantastic!”",
-    userImg: "https://randomuser.me/api/portraits/women/44.jpg",
+    userImg: "https://placehold.co/100x100?text=User+2",
     userName: "Jane Doe",
     userTitle: "COO Of LogiPro",
   },
   {
-    logo: "https://placehold.co/160x60?text=logoipsum3",
+    logo: "https://placehold.co/200x80?text=Logo+3",
     text: "“The analytics dashboard is a game changer for our business.”",
-    userImg: "https://randomuser.me/api/portraits/men/45.jpg",
+    userImg: "https://placehold.co/100x100?text=User+3",
     userName: "John Smith",
     userTitle: "Logistics Manager",
   },
@@ -118,10 +124,12 @@ const FeatureCard = ({ feature }: any) => {
       } items-center gap-16 w-full mb-32 px-6`}
     >
       <div className="w-full md:w-1/2">
-        <img
+        <Image
           src={feature.img.src}
           alt={feature.img.alt}
           className={feature.img.className}
+          width={480}
+          height={320}
         />
       </div>
       <div className="w-full md:w-1/2">
@@ -137,13 +145,21 @@ const FeatureCard = ({ feature }: any) => {
 const TestimonialCard = ({ testimonial }: any) => {
   return (
     <div className="flex flex-col items-center p-10 my-6">
-      <img src={testimonial.logo} alt="Logo" className="mb-8 h-16" />
+      <Image 
+        src={testimonial.logo} 
+        alt="Logo" 
+        className="mb-8 h-16 w-auto" 
+        width={200} 
+        height={80} 
+      />
       <p className="text-center text-gray-700 text-xl mb-8 max-w-3xl mx-auto leading-relaxed">{testimonial.text}</p>
       <div className="flex items-center gap-6">
-        <img
+        <Image
           src={testimonial.userImg}
           alt={testimonial.userName}
-          className="w-16 h-16 rounded-full"
+          className="w-16 h-16 rounded-full object-cover"
+          width={64}
+          height={64}
         />
         <div>
           <p className="font-semibold text-lg">{testimonial.userName}</p>
@@ -179,7 +195,7 @@ const CtaBanner = () => {
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-12">
           {/* Logo */}
           <div className="col-span-2 md:col-span-1">
-            <img src="/logo.svg" alt="FreightMee Logo" className="w-40 mb-6" />
+            <Image src={Logo} alt="FreightMee Logo" className="w-40 mb-6" />
           </div>
   
           {/* Links */}
@@ -241,7 +257,8 @@ const LandingPage = () => {
       {/* Navbar */}
       <nav className="my-10 w-full max-w-7xl">
         <div className="flex justify-between items-center bg-[#f5f3ff] py-4 px-8 rounded-full shadow-sm">
-          <div className="flex gap-10 text-lg">
+          <div className="flex items-center gap-10">
+            <Image src={Logo} alt="FreightMee Logo" className="w-32" width={128} height={40} />
             {navLinks.map((link) => (
               <Link key={link.label} href={link.href} className="text-indigo-700 font-medium">
                 {link.label}
@@ -270,10 +287,12 @@ const LandingPage = () => {
           {heroContent.cta.text} <kbd className="mx-1 px-2 py-1 bg-indigo-800 rounded">{heroContent.cta.key}</kbd> {heroContent.cta.suffix}
         </Link>
         <div className="mt-16 shadow-xl rounded-xl overflow-hidden">
-          <img
-            src={dashboardPreview.src}
+          <Image
+            src={Hero}
             alt={dashboardPreview.alt}
             className="w-full"
+            width={1200}
+            height={600}
           />
         </div>
       </section>
