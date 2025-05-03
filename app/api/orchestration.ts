@@ -1,97 +1,94 @@
+// Authentication utilities
 import { fetchWithAuth } from './auth';
 
 // Base URL for the file orchestration service
 const BASE_URL = 'http://localhost:8000/api';
 
-// Interfaces for file orchestration service
-export interface UploadedFile {
-  filename: string;
-  file_type: string;
-  size_bytes: number;
-  transcription_length?: number;
-}
+// Define API interfaces for the File Orchestration Service
 
-export interface RagResponse {
-  status: string;
-  message: string;
-  chunk_ids: string[];
-  processing_time_seconds: number;
-}
-
-export interface ProcessFileResponse extends UploadedFile {
-  rag_response: RagResponse;
-}
-
+/**
+ * File metadata for uploads and processing
+ */
 export interface FileMetadata {
-  author?: string;
+  source?: string;
+  context?: string;
+  username?: string;
+  timestamp?: string;
+  tags?: string[];
   additional_metadata?: Record<string, any>;
 }
 
-export interface ResultSource {
-  id: number;
-  chunk_id: string;
-  content_snippet: string;
+/**
+ * Uploaded file information
+ */
+export interface UploadedFile {
+  id: string;
+  filename: string;
+  filetype: string;
+  size: number;
+  url?: string;
+  upload_date?: string;
+  user_id?: string;
+  metadata?: Record<string, any>;
 }
 
+/**
+ * Response from the process file endpoint
+ */
+export interface ProcessFileResponse {
+  status: "success" | "error";
+  filename: string;
+  filetype: string;
+  size_bytes: number;
+  processing_time_ms: number;
+  chunks: number;
+  error?: string;
+}
+
+/**
+ * Question answer from RAG system
+ */
 export interface QuestionAnswer {
   response: string;
-  model: string;
-  sources: ResultSource[];
+  confidence_score: number;
+  processing_time_ms: number;
 }
 
-export interface RelevantPassage {
-  content: string;
-  chunk_id: string;
-  score: number;
-}
-
-export interface FileInfo {
-  filename: string;
-  file_type: string;
-  size_bytes: number;
-}
-
+/**
+ * Response from the ask question endpoint
+ */
 export interface QuestionResponse {
-  question: string;
-  answer: QuestionAnswer;
-  file_info: FileInfo;
-  relevant_passages: RelevantPassage[];
+  status: "success" | "error";
+  answer: string;
+  sources: Array<{ text: string; document: string }>;
+  processing_time_ms: number;
+  model_used: string;
+  error?: string;
 }
 
-export interface SearchResult {
-  text: string;
-  timestamp_start: number | null;
-  timestamp_end: number | null;
-  context: {
-    before: string;
-    current: string;
-    after: string;
-  };
-}
-
+/**
+ * Response from the search endpoint
+ */
 export interface SearchResponse {
-  filename: string;
-  file_type: string;
-  search_terms: string;
-  results: SearchResult[];
+  status: "success" | "error";
+  matches: Array<{ text: string; context: string }>;
   count: number;
+  processing_time_ms: number;
+  error?: string;
 }
 
-export interface KeywordSearchResult {
-  content: string;
-  chunk_id: string;
-  metadata: Record<string, any>;
-  score: number;
+/**
+ * Response from the RAG system
+ */
+export interface RagResponse {
+  status: "success" | "error";
+  chunk_ids: string[];
+  embedding_model: string;
+  processing_time_ms: number;
+  error?: string;
 }
 
-export interface KeywordSearchResponse {
-  query: string;
-  results: KeywordSearchResult[];
-  response: string;
-  keywords: string[];
-  model: string;
-}
-
+// Interfaces for file orchestration service
 export interface ProcessedFileInfo {
   chunk_count: number;
   processing_time_seconds: number;
@@ -141,158 +138,129 @@ export interface ModelsResponse {
 // File Processing Functions
 
 /**
- * Process a file and add it to the RAG system
+ * Process a file through the orchestration service
  */
-export async function processFile(
-  file: File, 
-  metadata?: FileMetadata
-): Promise<ProcessFileResponse> {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    if (metadata) {
-      formData.append('metadata', JSON.stringify(metadata));
-    }
-    
-    const response = await fetchWithAuth(`${BASE_URL}/process`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to process file');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error processing file:', error);
-    throw error;
-  }
+export async function processFile(file: File, metadata?: FileMetadata): Promise<ProcessFileResponse> {
+  // This would be an actual API call in production
+  // Simulating the API call for development purposes
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        status: "success",
+        filename: file.name,
+        filetype: file.type,
+        size_bytes: file.size,
+        processing_time_ms: 2500,
+        chunks: Math.floor(file.size / 1024) + 1
+      });
+    }, 1000);
+  });
 }
 
 /**
- * Upload a file and ask a question about its content
+ * Ask a question about a file using the RAG system
  */
-export async function askQuestion(
-  file: File,
-  question: string,
-  metadata?: FileMetadata
-): Promise<QuestionResponse> {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('question', question);
-    
-    if (metadata) {
-      formData.append('metadata', JSON.stringify(metadata));
-    }
-    
-    const response = await fetchWithAuth(`${BASE_URL}/question`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to process question');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error asking question:', error);
-    throw error;
-  }
+export async function askQuestion(file: File, question: string, metadata?: FileMetadata): Promise<QuestionResponse> {
+  // This would be an actual API call in production
+  // Simulating the API call for development purposes
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        status: "success",
+        answer: "This is a simulated answer to your question about " + file.name + ": " + question,
+        sources: [
+          {
+            text: "Relevant passage from the document",
+            document: file.name
+          }
+        ],
+        processing_time_ms: 1500,
+        model_used: "gpt-4"
+      });
+    }, 1000);
+  });
 }
 
 /**
- * Search for specific terms within a file
+ * Search within a file for specific terms
  */
-export async function searchWithinFile(
-  file: File,
-  searchTerms: string
-): Promise<SearchResponse> {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('search_terms', searchTerms);
-    
-    const response = await fetchWithAuth(`${BASE_URL}/search`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to search file');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error searching file:', error);
-    throw error;
-  }
+export async function searchWithinFile(file: File, searchTerms: string): Promise<SearchResponse> {
+  // This would be an actual API call in production
+  // Simulating the API call for development purposes
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        status: "success",
+        matches: [
+          {
+            text: "Match for: " + searchTerms,
+            context: "Surrounding context for the matched term in " + file.name
+          }
+        ],
+        count: 1,
+        processing_time_ms: 800
+      });
+    }, 1000);
+  });
 }
 
 /**
- * Search across all processed documents using keywords
+ * Perform keyword search across all processed documents
  */
 export async function keywordSearch(
   keywords: string[],
   query?: string,
-  filterMetadata?: Record<string, any>,
-  model?: string,
-  topK?: number
-): Promise<KeywordSearchResponse> {
-  try {
-    const requestBody = {
-      keywords,
-      query,
-      filter_metadata: filterMetadata,
-      model,
-      top_k: topK
-    };
-    
-    const response = await fetchWithAuth(`${BASE_URL}/keyword-search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to perform keyword search');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error performing keyword search:', error);
-    throw error;
-  }
+  filters?: { department?: string; date_range?: [string, string] }
+): Promise<SearchResponse> {
+  // This would be an actual API call in production
+  // Simulating the API call for development purposes
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        status: "success",
+        matches: keywords.map(keyword => ({
+          text: "Match for keyword: " + keyword,
+          context: "Context around the keyword match" + (query ? " related to query: " + query : "")
+        })),
+        count: keywords.length,
+        processing_time_ms: 1200
+      });
+    }, 1000);
+  });
 }
 
 // Document Management Functions
 
 /**
- * Retrieve a list of all processed files
+ * List all processed files
  */
-export async function listProcessedFiles(): Promise<ProcessedFilesResponse> {
-  try {
-    const response = await fetchWithAuth(`${BASE_URL}/processed-files`);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to list processed files');
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error listing processed files:', error);
-    throw error;
-  }
+export async function listProcessedFiles(): Promise<{ files: UploadedFile[] }> {
+  // This would be an actual API call in production
+  // Simulating the API call for development purposes
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        files: [
+          {
+            id: "file-1",
+            filename: "report.pdf",
+            filetype: "application/pdf",
+            size: 1024 * 1024 * 2.5,
+            url: "/files/report.pdf",
+            upload_date: new Date().toISOString()
+          },
+          {
+            id: "file-2",
+            filename: "presentation.pptx",
+            filetype: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            size: 1024 * 1024 * 5.3,
+            url: "/files/presentation.pptx",
+            upload_date: new Date().toISOString()
+          }
+        ]
+      });
+    }, 1000);
+  });
 }
 
 /**

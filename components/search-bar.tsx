@@ -13,6 +13,8 @@ import {
   CreditCard,
   User,
   Building,
+  MessageSquare,
+  File
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,7 +53,7 @@ export function SearchBar() {
     { value: "xlsx", label: "Excel (XLSX)" },
     { value: "jpg", label: "Image (JPG)" },
     { value: "png", label: "Image (PNG)" },
-    { value: "txt", label: "Texte (TXT)" },
+    { value: "txt", label: "Text (TXT)" },
   ]
 
   const toggleFileExtension = (ext: string) => {
@@ -129,25 +131,25 @@ export function SearchBar() {
   }
 
   const handleSearch = () => {
-    console.log("Recherche avec:", { query, activeFilters })
-    // Implémentez ici la logique de recherche
+    console.log("Search with:", { query, activeFilters })
+    // Implement search logic here that includes conversations and documents
   }
 
   return (
-    <div className="space-y-4 h-full">
+    <div className="space-y-4">
       <Card className="p-4">
         <div className="flex flex-col gap-4">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Rechercher dans les documents..."
+                placeholder="Search in conversations and documents..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <Button onClick={handleSearch}>Rechercher</Button>
+            <Button onClick={handleSearch}>Search</Button>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -156,13 +158,13 @@ export function SearchBar() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <FileType2 className="h-3.5 w-3.5" />
-                  <span>Extension</span>
+                  <span>File Type</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-56 p-3" align="start">
                 <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Extensions de fichier</h4>
+                  <h4 className="font-medium text-sm">File Extensions</h4>
                   <div className="space-y-2">
                     {fileExtensions.map((ext) => (
                       <div key={ext.value} className="flex items-center space-x-2">
@@ -179,36 +181,36 @@ export function SearchBar() {
               </PopoverContent>
             </Popover>
 
+            {/* Date Range Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>Date Range</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-3" align="start">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Date Range</h4>
+                  <DatePickerWithRange date={activeFilters.documentDateRange} setDate={setDocumentDateRange} />
+                </div>
+              </PopoverContent>
+            </Popover>
+
             {/* Analysis Date Filter */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>Date d'analyse</span>
+                  <span>Analysis Date</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-3" align="start">
                 <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Période d'analyse</h4>
+                  <h4 className="font-medium text-sm">Analysis Period</h4>
                   <DatePickerWithRange date={activeFilters.analysisDateRange} setDate={setAnalysisDateRange} />
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Document Date Filter */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>Date du document</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-3" align="start">
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Période du document</h4>
-                  <DatePickerWithRange date={activeFilters.documentDateRange} setDate={setDocumentDateRange} />
                 </div>
               </PopoverContent>
             </Popover>
@@ -218,13 +220,13 @@ export function SearchBar() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <CreditCard className="h-3.5 w-3.5" />
-                  <span>Fourchette de prix</span>
+                  <span>Price Range</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 p-3" align="start">
                 <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Fourchette de prix</h4>
+                  <h4 className="font-medium text-sm">Price Range</h4>
                   <PriceRangeSlider value={activeFilters.priceRange || [0, 10000]} onChange={setPriceRange} />
                 </div>
               </PopoverContent>
@@ -235,15 +237,15 @@ export function SearchBar() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <Tag className="h-3.5 w-3.5" />
-                  <span>Mots-clés</span>
+                  <span>Keywords</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-56 p-3" align="start">
                 <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Mots-clés</h4>
+                  <h4 className="font-medium text-sm">Keywords</h4>
                   <Input
-                    placeholder="Ajouter un mot-clé"
+                    placeholder="Add a keyword"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && e.currentTarget.value) {
                         setActiveFilters((prev) => ({
@@ -271,15 +273,15 @@ export function SearchBar() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <Building className="h-3.5 w-3.5" />
-                  <span>Fournisseur</span>
+                  <span>Supplier</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-56 p-3" align="start">
                 <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Fournisseurs</h4>
+                  <h4 className="font-medium text-sm">Suppliers</h4>
                   <Input
-                    placeholder="Ajouter un fournisseur"
+                    placeholder="Add a supplier"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && e.currentTarget.value) {
                         setActiveFilters((prev) => ({
@@ -315,7 +317,7 @@ export function SearchBar() {
                 <div className="space-y-2">
                   <h4 className="font-medium text-sm">Clients</h4>
                   <Input
-                    placeholder="Ajouter un client"
+                    placeholder="Add a client"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && e.currentTarget.value) {
                         setActiveFilters((prev) => ({
@@ -343,15 +345,16 @@ export function SearchBar() {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                   <Filter className="h-3.5 w-3.5" />
-                  <span>Plus de filtres</span>
+                  <span>More filters</span>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Statut du document</DropdownMenuItem>
-                <DropdownMenuItem>Type de document</DropdownMenuItem>
-                <DropdownMenuItem>Montant TVA</DropdownMenuItem>
-                <DropdownMenuItem>Numéro de facture</DropdownMenuItem>
+                <DropdownMenuItem>Document status</DropdownMenuItem>
+                <DropdownMenuItem>Document type</DropdownMenuItem>
+                <DropdownMenuItem>VAT amount</DropdownMenuItem>
+                <DropdownMenuItem>Invoice number</DropdownMenuItem>
+                <DropdownMenuItem>Conversation type</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -365,7 +368,7 @@ export function SearchBar() {
             activeFilters.suppliers.length > 0 ||
             activeFilters.clients.length > 0) && (
             <div className="flex flex-wrap items-center gap-2 pt-2">
-              <span className="text-sm text-muted-foreground">Filtres actifs:</span>
+              <span className="text-sm text-muted-foreground">Active filters:</span>
 
               {activeFilters.fileExtensions.map((ext) => (
                 <Badge key={ext} variant="secondary" className="gap-1">
@@ -378,7 +381,7 @@ export function SearchBar() {
               {activeFilters.analysisDateRange && (
                 <Badge variant="secondary" className="gap-1">
                   <Clock className="h-3 w-3" />
-                  {`Analyse: ${activeFilters.analysisDateRange.from?.toLocaleDateString()} - ${activeFilters.analysisDateRange.to?.toLocaleDateString()}`}
+                  {`Analysis: ${activeFilters.analysisDateRange.from?.toLocaleDateString()} - ${activeFilters.analysisDateRange.to?.toLocaleDateString()}`}
                   <X className="h-3 w-3 cursor-pointer" onClick={() => removeFilter("analysisDateRange")} />
                 </Badge>
               )}
@@ -386,7 +389,7 @@ export function SearchBar() {
               {activeFilters.documentDateRange && (
                 <Badge variant="secondary" className="gap-1">
                   <Calendar className="h-3 w-3" />
-                  {`Document: ${activeFilters.documentDateRange.from?.toLocaleDateString()} - ${activeFilters.documentDateRange.to?.toLocaleDateString()}`}
+                  {`Date: ${activeFilters.documentDateRange.from?.toLocaleDateString()} - ${activeFilters.documentDateRange.to?.toLocaleDateString()}`}
                   <X className="h-3 w-3 cursor-pointer" onClick={() => removeFilter("documentDateRange")} />
                 </Badge>
               )}
@@ -398,9 +401,33 @@ export function SearchBar() {
                   <X className="h-3 w-3 cursor-pointer" onClick={() => removeFilter("priceRange")} />
                 </Badge>
               )}
+              
+              {activeFilters.keywords.map((keyword) => (
+                <Badge key={keyword} variant="secondary" className="gap-1">
+                  <Tag className="h-3 w-3" />
+                  {keyword}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => removeFilter("keyword", keyword)} />
+                </Badge>
+              ))}
+              
+              {activeFilters.suppliers.map((supplier) => (
+                <Badge key={supplier} variant="secondary" className="gap-1">
+                  <Building className="h-3 w-3" />
+                  {supplier}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => removeFilter("supplier", supplier)} />
+                </Badge>
+              ))}
+              
+              {activeFilters.clients.map((client) => (
+                <Badge key={client} variant="secondary" className="gap-1">
+                  <User className="h-3 w-3" />
+                  {client}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => removeFilter("client", client)} />
+                </Badge>
+              ))}
 
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={clearAllFilters}>
-                Effacer tous les filtres
+                Clear all filters
               </Button>
             </div>
           )}
@@ -409,7 +436,7 @@ export function SearchBar() {
 
       {/* Results would go here */}
       <div className="p-8 text-center text-muted-foreground">
-        Utilisez les filtres ci-dessus pour rechercher dans vos documents
+        Use the filters above to search in your conversations and documents
       </div>
     </div>
   )

@@ -16,7 +16,7 @@ export const removeToken = () => {
 
 export async function loginUser(email: string, password: string) {
   try {
-    const response = await fetch('http://127.0.0.1:5000/auth/login', {
+    const response = await fetch('https://auth-microservice-47kl.onrender.com/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ export async function logoutUser() {
     // Get the token for the authorization header
     const token = getToken();
     
-    const response = await fetch('http://127.0.0.1:5000/auth/logout', {
+    const response = await fetch('https://auth-microservice-47kl.onrender.com/auth/logout', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -74,7 +74,7 @@ export async function logoutUser() {
 
 export async function registerUser(email: string, password: string) {
   try {
-    const response = await fetch('http://127.0.0.1:5000/auth/register', {
+    const response = await fetch('https://auth-microservice-47kl.onrender.com/auth/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

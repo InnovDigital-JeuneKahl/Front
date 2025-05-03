@@ -1,14 +1,64 @@
 "use client"
 
+// Type imports
 import type React from "react"
 
-import { useState, useCallback, useEffect, useRef } from "react"
-import { FileIcon, PlusIcon, SearchIcon, ArrowLeftIcon, MessageSquareIcon, PaperclipIcon, SendIcon, X, FileTextIcon, FileAudioIcon, FileImageIcon, Mic, MicOff, PlayIcon, PauseIcon, StopCircleIcon, TrashIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { toast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+// React hooks
+import { useState, useCallback, useEffect, useRef, memo } from "react"
+
+// UI Components
+import { Button } from "../../components/ui/button"
+import { Input } from "../../components/ui/input"
+import { Progress } from "../../components/ui/progress"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../components/ui/tooltip"
+import { FilePreview } from "../components/file-preview"
+import { cn } from "../../lib/utils"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog"
+import { SearchBar } from "../../components/search-bar"
+
+// Icons
+import { 
+  AlertTriangleIcon,
+  ArrowLeftIcon, 
+  BarChartIcon, 
+  FileAudioIcon, 
+  FileCheckIcon, 
+  FileIcon, 
+  FileImageIcon, 
+  FileTextIcon, 
+  Loader2,
+  Mic, 
+  MicIcon,
+  MicOff, 
+  MessageSquareIcon, 
+  PaperclipIcon, 
+  PauseIcon, 
+  PlayIcon, 
+  PlusIcon, 
+  SearchIcon, 
+  SendIcon, 
+  Sparkles, 
+  StopCircleIcon,
+  TrashIcon, 
+  UserCircle, 
+  X 
+} from "lucide-react"
+
+// Hooks
+import { toast } from "../../hooks/use-toast"
+import { useOrchestration } from "../hooks/use-orchestration"
+
+// Services
+import {
+  processFilesWithOrchestration,
+  askQuestionWithOrchestration,
+  searchWithinFileUsingOrchestration,
+  generateFileSummary,
+  isFileTypeSupported,
+  extractTextFromFile,
+  createMetadataFromChatContext,
+} from "../utils/orchestration-service"
+import { FileMetadata } from "../api/orchestration"
 
 // Message types
 type MessageType = 'text' | 'file' | 'analysis-result' | 'system'
@@ -20,7 +70,19 @@ interface Message {
   timestamp: Date
   sender: 'user' | 'assistant'
   files?: UploadedFile[]
-  analysisResults?: any
+  analysisResults?: {
+    keyPoints?: string[]
+    sentiment?: string
+    confidence?: number
+    entities?: {
+      people?: string[]
+      organizations?: string[]
+      locations?: string[]
+      dates?: string[]
+      products?: string[]
+      [key: string]: string[] | undefined
+    }
+  }
 }
 
 interface UploadedFile {
@@ -31,6 +93,15 @@ interface UploadedFile {
   progress: number
   status: "uploading" | "complete" | "error"
   url?: string
+  analysisReady?: boolean
+}
+
+// Props for MessageItem component
+interface MessageItemProps {
+  message: Message
+  onAudioPlay: (fileId: string, url?: string) => void
+  playingAudioId: string | null
+  isHydrated: boolean
 }
 
 // Chat thread type
@@ -52,6 +123,21 @@ const threadColors = {
   indigo: "bg-indigo-500",
 }
 
+// Format utility functions
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  else if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  else return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatTime = (date: Date): string => {
+  return date.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
 // Hook to safely use browser APIs and ensure hydration safety
 function useHydration() {
   const [hydrated, setHydrated] = useState(false);
@@ -62,6 +148,166 @@ function useHydration() {
   
   return hydrated;
 }
+
+// Update the MessageItem component to display analysis results
+const MessageItem = memo(({ message, onAudioPlay, playingAudioId, isHydrated }: MessageItemProps) => {
+  const isUser = message.sender === "user"
+  const messageRef = useRef<HTMLDivElement>(null)
+  
+  // Scroll to the latest message
+  useEffect(() => {
+    messageRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [])
+  
+  // Format analysis results display if present
+  const renderAnalysisResults = () => {
+    if (!message.analysisResults) return null
+    
+    return (
+      <div className="mt-3 pt-3 border-t border-slate-200">
+        {message.analysisResults.keyPoints && (
+          <div className="mb-2">
+            <h4 className="text-sm font-semibold text-slate-800 mb-1">Key Points</h4>
+            <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
+              {message.analysisResults.keyPoints.map((point: string, idx: number) => (
+                <li key={idx}>{point}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        {message.analysisResults.entities && (
+          <div className="mt-3">
+            <h4 className="text-sm font-semibold text-slate-800 mb-1">Entities</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {Object.entries(message.analysisResults.entities).map(([category, items]) => (
+                <div key={category} className="bg-slate-50 p-2 rounded">
+                  <span className="font-medium capitalize">{category}:</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {items && items.slice(0, 3).map((item: string, idx: number) => (
+                      <span key={idx} className="bg-slate-200 px-1.5 py-0.5 text-xs rounded text-slate-700">
+                        {item}
+                      </span>
+                    ))}
+                    {items && items.length > 3 && (
+                      <span className="text-xs text-slate-500">+{items.length - 3} more</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {message.analysisResults.sentiment && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-700">Sentiment:</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded ${
+              message.analysisResults.sentiment === "positive" ? "bg-green-100 text-green-700" :
+              message.analysisResults.sentiment === "negative" ? "bg-red-100 text-red-700" :
+              "bg-slate-100 text-slate-700"
+            }`}>
+              {message.analysisResults.sentiment.charAt(0).toUpperCase() + message.analysisResults.sentiment.slice(1)}
+            </span>
+            
+            {message.analysisResults.confidence && (
+              <span className="text-xs text-slate-500">
+                Confidence: {(message.analysisResults.confidence * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+  
+  return (
+    <div 
+      ref={messageRef}
+      className={cn(
+        "py-3 px-4 rounded-md mb-3",
+        isUser ? "bg-primary text-primary-foreground ml-10" : "bg-slate-100 mr-10",
+        message.type === "system" && "bg-amber-100 text-amber-900 border border-amber-200",
+        message.type === "analysis-result" && "bg-sky-50 border border-sky-100"
+      )}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          {isUser ? (
+            <UserCircle className="w-4 h-4" />
+          ) : message.type === "system" ? (
+            <AlertTriangleIcon className="w-4 h-4 text-amber-500" />
+          ) : message.type === "analysis-result" ? (
+            <BarChartIcon className="w-4 h-4 text-sky-500" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          <span className="text-xs font-medium">
+            {isUser ? "You" : message.type === "system" ? "System" : message.type === "analysis-result" ? "Analysis Results" : "Assistant"}
+          </span>
+        </div>
+        <span className="text-xs opacity-70">
+          {formatTime(message.timestamp)}
+        </span>
+      </div>
+      
+      {/* Audio message */}
+      {message.files && message.files.some(file => file.type.includes("audio")) && (
+        <div className="mb-3">
+          {message.files.filter(file => file.type.includes("audio")).map(file => (
+            <div key={file.id} className="flex items-center gap-2 my-1 p-2 rounded-md bg-white bg-opacity-10">
+              {isHydrated && (
+                <Button 
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  onClick={() => onAudioPlay(file.id, file.url)}
+                >
+                  {playingAudioId === file.id ? (
+                    <PauseIcon className="h-4 w-4" />
+                  ) : (
+                    <PlayIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate">{file.name}</p>
+                <p className="text-xs opacity-70">{formatFileSize(file.size)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* File attachments (non-audio) */}
+      {message.files && message.files.some(file => !file.type.includes("audio")) && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {message.files.filter(file => !file.type.includes("audio")).map(file => (
+            <div key={file.id} className="flex items-center gap-2 bg-white bg-opacity-10 p-2 rounded-md">
+              {file.type.includes("image") ? (
+                <FileImageIcon className="h-4 w-4" />
+              ) : file.type.includes("pdf") ? (
+                <FileTextIcon className="h-4 w-4" />
+              ) : (
+                <FileIcon className="h-4 w-4" />
+              )}
+              <span className="text-sm truncate max-w-[150px]">{file.name}</span>
+              {file.analysisReady && (
+                <FileCheckIcon className="h-4 w-4 text-green-400" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Message text content */}
+      <div className="whitespace-pre-wrap">{message.content}</div>
+      
+      {/* Analysis results */}
+      {renderAnalysisResults()}
+    </div>
+  )
+})
 
 export default function ChatDocumentAnalysis() {
   // Use hydration hook to safely detect client-side rendering
@@ -144,6 +390,13 @@ export default function ChatDocumentAnalysis() {
   // Add drag and drop state variables
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
+  // Add state for file preview in the ChatDocumentAnalysis component
+  const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
+  const [showFilePreview, setShowFilePreview] = useState(false);
+
+  // Add state for search dialog
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+
   // Auto scroll to bottom of messages - Client side only
   useEffect(() => {
     if (isHydrated && messagesEndRef.current) {
@@ -215,44 +468,62 @@ export default function ChatDocumentAnalysis() {
     setCurrentMessage("")
   }, [])
   
-  // Handle file selection
+  // Update the handleFileSelect function to check for supported file types
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files).map(file => ({
-        id: `file-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        progress: 0,
-        status: "uploading" as const,
-      }))
+      const fileList = Array.from(e.target.files)
       
-      setCurrentFiles(prev => [...prev, ...newFiles])
+      // Check for unsupported files
+      const unsupportedFiles = fileList.filter(file => !isFileTypeSupported(file.name))
       
-      // Simulate upload progress
-      newFiles.forEach(file => {
-        let progress = 0
-        const interval = setInterval(() => {
-          progress += 10
-          if (progress >= 100) {
-            clearInterval(interval)
-            setCurrentFiles(prev => 
-              prev.map(f => f.id === file.id ? { ...f, progress: 100, status: "complete" } : f)
-            )
-          } else {
-            setCurrentFiles(prev => 
-              prev.map(f => f.id === file.id ? { ...f, progress } : f)
-            )
-          }
-        }, 300)
-      })
+      if (unsupportedFiles.length > 0) {
+        // Show toast notification for unsupported files
+        toast({
+          title: "Unsupported file type",
+          description: `${unsupportedFiles.length > 1 ? 'Some files are' : 'This file is'} not supported: ${unsupportedFiles.map(f => f.name).join(', ')}`,
+          variant: "destructive",
+        })
+        
+        // Filter out unsupported files
+        const supportedFiles = fileList.filter(file => isFileTypeSupported(file.name))
+        
+        if (supportedFiles.length === 0) {
+          // Reset the file input if all files are unsupported
+          e.target.value = ""
+          return
+        }
+        
+        // Continue with supported files
+        const newFiles: UploadedFile[] = supportedFiles.map(file => ({
+          id: generateId(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          progress: 100,
+          status: "complete",
+          url: URL.createObjectURL(file)
+        }))
+        
+        setCurrentFiles(prevFiles => [...prevFiles, ...newFiles])
+      } else {
+        // All files are supported, proceed normally
+        const newFiles: UploadedFile[] = fileList.map(file => ({
+          id: generateId(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          progress: 100,
+          status: "complete",
+          url: URL.createObjectURL(file)
+        }))
+        
+        setCurrentFiles(prevFiles => [...prevFiles, ...newFiles])
+      }
+      
+      // Reset the file input
+      e.target.value = ""
     }
-    
-    // Reset the input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
-  }, [])
+  }, [generateId])
   
   // Handle removing a file
   const handleRemoveFile = useCallback((fileId: string) => {
@@ -405,59 +676,185 @@ export default function ChatDocumentAnalysis() {
     }
   }, [isRecording, startRecording, stopRecording])
   
-  // Handle sending a message
-  const handleSendMessage = useCallback((e?: React.FormEvent) => {
+  // Add the orchestration hook to the ChatDocumentAnalysis component
+  const {
+    loading: orchestrationLoading,
+    progress: uploadProgress,
+    processFiles,
+    askQuestion: askQuestionOrchestration,
+    summarizeFile,
+    extractEntities,
+    extractText
+  } = useOrchestration();
+
+  // Update the handleSendMessage function to use the orchestration hook
+  const handleSendMessage = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault()
     
+    // Get the message text directly from the input field
+    const messageText = e?.target && (e.target as HTMLFormElement).querySelector('input')?.value || '';
+    
     // Don't send empty messages unless files are attached
-    if (!currentMessage.trim() && currentFiles.length === 0) return
+    if (!messageText.trim() && currentFiles.length === 0) return
     
     // Add user message to chat
     const newMessage: Message = {
       id: generateId(),
       type: currentFiles.length > 0 ? "file" : "text",
-      content: currentMessage,
+      content: messageText,
       timestamp: new Date(),
       sender: "user",
       files: currentFiles.length > 0 ? [...currentFiles] : undefined
     }
     
     setMessages(prev => [...prev, newMessage])
-    setCurrentMessage("")
+    setCurrentMessage("")  // Keep this for state consistency, although we're not using it for the input
     setCurrentFiles([])
     setIsProcessing(true)
     
-    // Simulate assistant response
-    setTimeout(() => {
-      const assistantMessage: Message = {
+    // Get the current thread title for metadata
+    const currentThreadTitle = threads.find(t => t.id === activeThreadId)?.title || "New Conversation"
+    
+    try {
+      // Check if files are attached - process them with orchestration service
+      if (newMessage.files && newMessage.files.length > 0) {
+        // In a real implementation, you would have actual File objects
+        // For this simulation, we'll create dummy File objects based on our UploadedFile objects
+        const dummyFiles: File[] = newMessage.files.map(file => {
+          // This is a simplified mock - in a real app, you'd use actual File objects
+          return new File(
+            [new Blob([''], { type: file.type })], // Empty content for simulation
+            file.name,
+            { type: file.type }
+          );
+        });
+        
+        // For simulation purposes, we'll delay to simulate processing
+        setTimeout(async () => {
+          // In a real implementation, this would process actual files
+          // const result = await processFiles(dummyFiles, currentThreadTitle);
+          
+          // For simulation, we'll generate a response based on file types
+          const fileTypes = newMessage.files?.map(f => f.type) || [];
+          const containsPdf = fileTypes.some(type => type.includes('pdf'));
+          const containsAudio = fileTypes.some(type => type.includes('audio'));
+          
+          let analysisContent = "";
+          
+          if (containsPdf) {
+            analysisContent = "I've analyzed your PDF files and found some interesting insights. The financial report shows a 15% growth in Q3, and the market analysis indicates potential expansion opportunities in the Asian market.";
+          } else if (containsAudio) {
+            analysisContent = "I've transcribed and analyzed your audio files. The meeting recording contains important discussions about the upcoming product launch timeline and marketing strategy adjustments based on last quarter's results.";
+          } else {
+            analysisContent = "I've processed your files and extracted the key information. The documents contain details about project timelines, resource allocation, and strategic goals for the next fiscal year.";
+          }
+          
+          // Add insights to the relevant files
+          const updatedFiles = newMessage.files?.map(file => ({
+            ...file,
+            analysisReady: true
+          }));
+          
+          // Update the message with processed files
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === newMessage.id 
+                ? { ...msg, files: updatedFiles }
+                : msg
+            )
+          );
+          
+          // Add assistant response
+          const assistantMessage: Message = {
+            id: generateId(),
+            type: "analysis-result",
+            content: analysisContent,
+            timestamp: new Date(),
+            sender: "assistant",
+            analysisResults: {
+              keyPoints: [
+                "Revenue increased by 15% compared to previous quarter",
+                "Market expansion opportunities identified in Asian markets",
+                "Product line diversification recommended for Q4",
+                "Cost reduction initiatives showing positive results"
+              ],
+              sentiment: "positive",
+              confidence: 0.92
+            }
+          };
+          
+          setMessages(prev => [...prev, assistantMessage]);
+          setIsProcessing(false);
+          
+          // Update thread title and last message if this is a new conversation
+          if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
+            const fileNames = newMessage.files?.map(f => f.name).join(", ") || "";
+            const truncatedTitle = fileNames.length > 30 
+              ? fileNames.slice(0, 30) + "..."
+              : fileNames;
+            
+            setThreads(prev => prev.map(thread => 
+              thread.id === activeThreadId 
+                ? { 
+                    ...thread, 
+                    title: `Analysis of ${truncatedTitle}`,
+                    lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
+                  } 
+                : thread
+            ));
+          }
+        }, 2000);
+      } else {
+        // For text questions, we would use askQuestionOrchestration, but here we'll simulate
+        setTimeout(() => {
+          const assistantMessage: Message = {
+            id: generateId(),
+            type: "text",
+            content: "Based on the documents you've shared previously, I'd recommend focusing on the financial projections in section 3. The growth targets seem ambitious but achievable given the market conditions outlined in the report.",
+            timestamp: new Date(),
+            sender: "assistant",
+          };
+          
+          setMessages(prev => [...prev, assistantMessage]);
+          setIsProcessing(false);
+          
+          // Update thread title and last message if this is a new conversation
+          if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
+            setThreads(prev => prev.map(thread => 
+              thread.id === activeThreadId 
+                ? { 
+                    ...thread, 
+                    title: messageText.slice(0, 30) + (messageText.length > 30 ? "..." : ""),
+                    lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
+                  } 
+                : thread
+            ));
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error processing message with orchestration service:", error);
+      
+      // Add error message
+      const errorMessage: Message = {
         id: generateId(),
-        type: "text",
-        content: currentFiles.length > 0 
-          ? "I've analyzed your files and found some interesting insights. The financial report shows a 15% growth in Q3, and the market analysis indicates potential expansion opportunities in the Asian market."
-          : "Based on the documents you've shared previously, I'd recommend focusing on the financial projections in section 3. The growth targets seem ambitious but achievable given the market conditions outlined in the report.",
+        type: "system",
+        content: "Sorry, there was an error processing your request. Please try again.",
         timestamp: new Date(),
         sender: "assistant",
-      }
+      };
       
-      setMessages(prev => [...prev, assistantMessage])
-      setIsProcessing(false)
+      setMessages(prev => [...prev, errorMessage]);
+      setIsProcessing(false);
       
-      // Update thread title and last message if this is a new conversation
-      if (threads.find(t => t.id === activeThreadId)?.title === "New Conversation") {
-        setThreads(prev => prev.map(thread => 
-          thread.id === activeThreadId 
-            ? { 
-                ...thread, 
-                title: currentFiles.length > 0 
-                  ? `Analysis of ${currentFiles.map(f => f.name).join(", ")}` 
-                  : currentMessage.slice(0, 30) + (currentMessage.length > 30 ? "..." : ""),
-                lastMessage: assistantMessage.content.slice(0, 60) + (assistantMessage.content.length > 60 ? "..." : "")
-              } 
-            : thread
-        ))
-      }
-    }, 2000)
-  }, [currentMessage, currentFiles, generateId, activeThreadId, threads])
+      // Show toast notification
+      toast({
+        title: "Error",
+        description: "Failed to process your request",
+        variant: "destructive",
+      });
+    }
+  }, [currentFiles, generateId, activeThreadId, threads]);
   
   // Get file icon based on file type
   const getFileIcon = useCallback((fileType: string) => {
@@ -545,6 +942,338 @@ export default function ChatDocumentAnalysis() {
     }
   }, []);
 
+  // Update the handleFileAction function to use the orchestration hook
+  const handleFileAction = useCallback((fileId: string, action: string) => {
+    // Find the file in messages
+    const fileMessage = messages.find(message => 
+      message.files?.some(file => file.id === fileId)
+    );
+    
+    const file = fileMessage?.files?.find(f => f.id === fileId);
+    
+    if (!file) return;
+    
+    setIsProcessing(true);
+    
+    // Process different file analysis actions
+    switch (action) {
+      case 'summarize':
+        // In a real implementation, this would call summarizeFile from the hook
+        setTimeout(() => {
+          const summaryMessage: Message = {
+            id: generateId(),
+            type: "analysis-result",
+            content: `Summary of ${file.name}: This document contains key financial projections for Q3, showing a 15% increase in revenue and plans for market expansion in Asia. Key stakeholders include the finance and marketing teams, with implementation scheduled for next quarter.`,
+            timestamp: new Date(),
+            sender: "assistant",
+            analysisResults: {
+              keyPoints: [
+                "Revenue increased by 15% compared to previous quarter",
+                "Asian markets showed strongest growth at 35%",
+                "New product line launch scheduled for Q4 2024",
+                "Marketing budget increased by 12% for upcoming campaigns",
+                "Cost reduction initiatives resulted in 8% operational savings"
+              ],
+              sentiment: "positive",
+              confidence: 0.92
+            }
+          };
+          
+          setMessages(prev => [...prev, summaryMessage]);
+          setIsProcessing(false);
+          
+          toast({
+            title: "Summary generated",
+            description: `Summary of ${file.name} has been generated`,
+          });
+        }, 1500);
+        break;
+        
+      case 'extract-text':
+        // In a real implementation, this would call extractText from the hook
+        setTimeout(() => {
+          const textMessage: Message = {
+            id: generateId(),
+            type: "analysis-result",
+            content: `Extracted text from ${file.name}:\n\nFINANCIAL PROJECTIONS Q3 2024\n\nRevenue: $10.2M (15% YoY increase)\nExpenses: $7.8M (5% YoY increase)\nProfit: $2.4M (45% YoY increase)\n\nKey Growth Areas:\n- Product A: 22% growth\n- Service B: 18% growth\n- Region C: 35% growth\n\nMarket Expansion Strategy:\n1. Target Asian markets in Q4\n2. Launch product line extensions\n3. Increase marketing spend by 12%`,
+            timestamp: new Date(),
+            sender: "assistant",
+          };
+          
+          setMessages(prev => [...prev, textMessage]);
+          setIsProcessing(false);
+          
+          toast({
+            title: "Text extracted",
+            description: `Text extracted from ${file.name}`,
+          });
+        }, 1500);
+        break;
+        
+      case 'analyze-entities':
+        // In a real implementation, this would call extractEntities from the hook
+        setTimeout(() => {
+          const entityMessage: Message = {
+            id: generateId(),
+            type: "analysis-result",
+            content: `Entity analysis for ${file.name}:`,
+            timestamp: new Date(),
+            sender: "assistant",
+            analysisResults: {
+              entities: {
+                people: ["John Smith (CEO)", "Sarah Johnson (CFO)", "Michael Wong (CMO)"],
+                organizations: ["XYZ Corp", "ABC Partners", "Global Ventures"],
+                locations: ["New York", "Singapore", "London"],
+                dates: ["October 15, 2024", "Q4 2024", "January 2025"],
+                products: ["Product Line A", "Service Suite B", "Enterprise Solution C"]
+              }
+            }
+          };
+          
+          setMessages(prev => [...prev, entityMessage]);
+          setIsProcessing(false);
+          
+          toast({
+            title: "Entities analyzed",
+            description: `Entities in ${file.name} have been analyzed`,
+          });
+        }, 1500);
+        break;
+        
+      default:
+        setIsProcessing(false);
+        break;
+    }
+  }, [messages, generateId]);
+
+  // Add a function to handle file preview
+  const handleFilePreview = useCallback((fileId: string) => {
+    // Find the file in messages
+    const fileMessage = messages.find(message => 
+      message.files?.some(file => file.id === fileId)
+    );
+    
+    const file = fileMessage?.files?.find(f => f.id === fileId);
+    
+    if (file) {
+      setPreviewFile(file);
+      setShowFilePreview(true);
+    }
+  }, [messages]);
+
+  // Add a function to close file preview
+  const handleCloseFilePreview = useCallback(() => {
+    setShowFilePreview(false);
+    setPreviewFile(null);
+  }, []);
+
+  // Replace the entire MessageInput component with this new version
+  const MessageInput = () => {
+    // Use a ref instead of state for the input field
+    const inputRef = useRef<HTMLInputElement>(null);
+    
+    // Add a state for file upload progress
+    const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+    
+    // Handle the form submission
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      
+      // Get the value directly from the input element
+      const message = inputRef.current?.value || "";
+      
+      // Don't send empty messages unless files are attached
+      if (!message.trim() && currentFiles.length === 0) return;
+      
+      // Call the send message handler with the current input value
+      handleSendMessage(e);
+      
+      // Clear the input field directly
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+    };
+    
+    // Simulate file upload progress
+    useEffect(() => {
+      if (currentFiles.length > 0) {
+        // Create initial progress state for each file
+        const initialProgress: Record<string, number> = {};
+        currentFiles.forEach(file => {
+          initialProgress[file.id] = 0;
+        });
+        setUploadProgress(initialProgress);
+        
+        // Simulate progress updates
+        const interval = setInterval(() => {
+          setUploadProgress(prev => {
+            const newProgress = { ...prev };
+            let allComplete = true;
+            
+            Object.keys(newProgress).forEach(fileId => {
+              if (newProgress[fileId] < 100) {
+                newProgress[fileId] += Math.floor(Math.random() * 10) + 5;
+                if (newProgress[fileId] > 100) newProgress[fileId] = 100;
+                if (newProgress[fileId] < 100) allComplete = false;
+              }
+            });
+            
+            if (allComplete) {
+              clearInterval(interval);
+            }
+            
+            return newProgress;
+          });
+        }, 500);
+        
+        return () => clearInterval(interval);
+      }
+    }, [currentFiles]);
+    
+    // Helper to get file processing stage based on progress
+    const getFileStage = (progress: number): string => {
+      if (progress < 25) return "Preparing";
+      if (progress < 50) return "Uploading";
+      if (progress < 75) return "Validating";
+      if (progress < 100) return "Processing";
+      return "Ready";
+    };
+    
+    return (
+      <div className="border-t border-slate-200 px-4 py-4">
+        {/* File preview */}
+        {currentFiles.length > 0 && (
+          <div className="mb-3 space-y-2">
+            {currentFiles.map(file => (
+              <div key={file.id} className="bg-white rounded-md p-2 shadow-sm border border-slate-200 flex items-center gap-3">
+                {file.type.includes("pdf") ? (
+                  <FileTextIcon className="text-red-500" size={18} />
+                ) : file.type.includes("audio") ? (
+                  <FileAudioIcon className="text-blue-500" size={18} />
+                ) : file.type.includes("image") ? (
+                  <FileImageIcon className="text-purple-500" size={18} />
+                ) : (
+                  <FileIcon className="text-slate-500" size={18} />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium truncate text-slate-700">{file.name}</p>
+                    <Button 
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => handleRemoveFile(file.id)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1 justify-between">
+                    <p className="text-xs text-slate-500">{formatFileSize(file.size)}</p>
+                    <p className="text-xs font-medium text-slate-600">
+                      {getFileStage(uploadProgress[file.id] || 0)}
+                    </p>
+                  </div>
+                  <div className="mt-1 h-1 w-full bg-slate-200 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${uploadProgress[file.id] || 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Message input form */}
+        <form onSubmit={handleSubmit} className="relative">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                placeholder={isRecording ? "Recording... click stop when done" : "Type your message..."}
+                defaultValue=""
+                disabled={isRecording || isProcessing}
+                className="pr-24"
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {isHydrated && (
+                  <>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-slate-500 hover:text-slate-900"
+                            onClick={handleToggleRecording}
+                            disabled={isRecording || isProcessing}
+                          >
+                            <MicIcon className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Record voice message</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </>
+                )}
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-slate-500 hover:text-slate-900"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isRecording || isProcessing}
+                      >
+                        <PaperclipIcon className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Attach file</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  disabled={isRecording || isProcessing}
+                  multiple
+                />
+              </div>
+            </div>
+            
+            <Button 
+              type="submit" 
+              size="icon"
+              disabled={isRecording || isProcessing}
+            >
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <SendIcon className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Add function to toggle search dialog
+  const toggleSearchDialog = useCallback(() => {
+    setShowSearchDialog(prev => !prev);
+  }, []);
+
   return (
     <div className="flex h-screen bg-white text-slate-800">
       {/* Left Sidebar - Chat threads */}
@@ -560,14 +1289,14 @@ export default function ChatDocumentAnalysis() {
         </div>
         
         <div className="p-2 mb-2">
-          <div className="relative">
-            <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="Search conversations..."
-              className="pl-8 bg-white border-slate-200 rounded-sm text-sm h-9 placeholder:text-slate-400"
-            />
-          </div>
+          <Button
+            variant="outline"
+            className="w-full flex items-center justify-center gap-2 bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+            onClick={toggleSearchDialog}
+          >
+            <SearchIcon className="h-4 w-4" />
+            <span>Search</span>
+          </Button>
         </div>
 
         <div className="flex-1 overflow-auto px-2">
@@ -626,73 +1355,15 @@ export default function ChatDocumentAnalysis() {
         <div className="flex-1 overflow-auto p-4 bg-slate-50">
           <div className="max-w-3xl mx-auto space-y-4">
             {messages.map((message) => (
-              <div 
-                key={message.id} 
-                className={cn(
-                  "flex",
-                  message.sender === "user" ? "justify-end" : "justify-start"
-                )}
-              >
-                <div 
-                  className={cn(
-                    "max-w-[80%] rounded-lg p-4", 
-                    message.sender === "user" 
-                      ? "bg-purple-600 text-white" 
-                      : message.type === "system"
-                        ? "bg-slate-100 text-slate-600 border border-slate-200"
-                        : "bg-white border border-slate-200 text-slate-800"
-                  )}
-                >
-                  {message.content && (
-                    <div className="mb-2">{message.content}</div>
-                  )}
-                  
-                  {message.files && message.files.length > 0 && (
-                    <div className="mt-2 space-y-2">
-                      {message.files.map(file => (
-                        <div key={file.id} className="flex items-center gap-2 bg-white/10 p-2 rounded text-sm">
-                          {getFileIcon(file.type)}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{file.name}</div>
-                            <div className="text-xs opacity-75">{formatFileSize(file.size)}</div>
-                          </div>
-                          
-                          {/* Audio playback controls - Only rendered client-side after hydration */}
-                          {file.type.includes('audio') && file.url && isHydrated && (
-                            <button 
-                              className="p-1 rounded-full hover:bg-white/20"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                
-                                // Client-only code
-                                const audioElement = document.getElementById(`audio-${file.id}`) as HTMLAudioElement;
-                                if (audioElement) {
-                                  if (audioElement.paused) {
-                                    audioElement.play();
-                                  } else {
-                                    audioElement.pause();
-                                  }
-                                }
-                              }}
-                            >
-                              <PlayIcon size={16} />
-                              {isHydrated && <audio id={`audio-${file.id}`} src={file.url} className="hidden" />}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className={cn(
-                    "text-xs mt-1", 
-                    message.sender === "user" ? "text-purple-200" : "text-slate-400"
-                  )}>
-                    {formatTime(message.timestamp)}
-                  </div>
-                </div>
-              </div>
+              <MessageItem
+                key={message.id}
+                message={message}
+                onAudioPlay={(fileId, url) => {
+                  // Implementation of onAudioPlay
+                }}
+                playingAudioId={null}
+                isHydrated={isHydrated}
+              />
             ))}
             
             {/* Only render loading indicator on client */}
@@ -744,62 +1415,16 @@ export default function ChatDocumentAnalysis() {
           </div>
         )}
         
+        {/* File Preview */}
+        <FilePreview 
+          file={previewFile}
+          open={showFilePreview}
+          onClose={handleCloseFilePreview}
+          onAnalyze={handleFileAction}
+        />
+        
         {/* Message input */}
-        <div className="p-4 border-t border-slate-200 bg-white">
-          <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto">
-            <div className="flex items-center gap-2">
-              <Button 
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-slate-500 hover:text-purple-600 hover:bg-purple-50"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <PaperclipIcon size={20} />
-              </Button>
-              
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                onChange={handleFileSelect}
-                multiple
-              />
-              
-              <div className="relative flex-1">
-                <Input
-                  value={currentMessage}
-                  onChange={(e) => setCurrentMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  className="pr-10 py-6 text-base bg-white border-slate-300 rounded-full text-slate-800"
-                />
-                
-                {/* Voice recording button - Safe client-side rendering */}
-                {isHydrated && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 ${
-                      isRecording ? "text-red-500" : "text-slate-400 hover:text-slate-700"
-                    }`}
-                    onClick={handleToggleRecording}
-                  >
-                    {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                  </Button>
-                )}
-              </div>
-              
-              <Button 
-                type="submit" 
-                className="rounded-full h-10 w-10 p-0 flex items-center justify-center bg-purple-600 hover:bg-purple-700"
-                disabled={!currentMessage.trim() && currentFiles.length === 0}
-              >
-                <SendIcon size={18} />
-              </Button>
-            </div>
-          </form>
-        </div>
+        <MessageInput />
       </div>
 
       {/* Right sidebar - Files overview with drag and drop */}
@@ -836,7 +1461,11 @@ export default function ChatDocumentAnalysis() {
                 .filter(message => message.files && message.files.length > 0)
                 .flatMap(message => message.files || [])
                 .map(file => (
-                  <div key={file.id} className="bg-white rounded-md p-3 shadow-sm border border-slate-200">
+                  <div 
+                    key={file.id} 
+                    className="bg-white rounded-md p-3 shadow-sm border border-slate-200 cursor-pointer transition-all hover:shadow-md"
+                    onClick={() => handleFilePreview(file.id)}
+                  >
                     <div className="flex items-center gap-3">
                       {file.type.includes("pdf") ? (
                         <FileTextIcon className="text-red-500" size={18} />
@@ -860,6 +1489,60 @@ export default function ChatDocumentAnalysis() {
                       </div>
                       <div className="mt-1 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                         <div className="bg-green-500 h-full rounded-full w-full"></div>
+                      </div>
+                      
+                      {/* File actions */}
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" className="text-xs px-2 py-1 h-auto" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFileAction(file.id, 'summarize');
+                                }}>
+                                Summarize
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Generate a summary of this document</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" className="text-xs px-2 py-1 h-auto"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFileAction(file.id, 'extract-text');
+                                }}>
+                                Extract Text
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Extract all text from this document</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" className="text-xs px-2 py-1 h-auto"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFileAction(file.id, 'analyze-entities');
+                                }}>
+                                Entities
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Analyze entities (people, places, organizations)</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </div>
                   </div>
@@ -990,6 +1673,18 @@ export default function ChatDocumentAnalysis() {
           </div>
         </div>
       )}
+
+      {/* Search Dialog */}
+      <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
+        <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Search</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <SearchBar />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

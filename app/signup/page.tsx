@@ -6,16 +6,19 @@ import { ChevronRight, Eye, EyeOff } from "lucide-react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { loginUser } from "../api/auth"
-import { toast } from "@/components/ui/use-toast"
+import { Button } from "../../components/ui/button"
+import { Checkbox } from "../../components/ui/checkbox"
+import { Input } from "../../components/ui/input"
+import { registerUser } from "../api/auth"
+import { toast } from "../../hooks/use-toast"
 
-export default function AuthPage() {
+export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [acceptTerms, setAcceptTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
@@ -23,13 +26,36 @@ export default function AuthPage() {
     setShowPassword(!showPassword)
   }
 
+  const toggleConfirmPasswordVisibility = () => {
+    setShowConfirmPassword(!showConfirmPassword)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!email || !password) {
+    // Validate form fields
+    if (!email || !password || !confirmPassword) {
       toast({
         title: "Error",
-        description: "Please enter both email and password",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!acceptTerms) {
+      toast({
+        title: "Error",
+        description: "Please accept the terms of use",
         variant: "destructive",
       })
       return
@@ -38,16 +64,13 @@ export default function AuthPage() {
     setIsLoading(true)
 
     try {
-      // Login
-      const response = await loginUser(email, password)
-      
+      // Register
+      await registerUser(email, password)
       toast({
         title: "Success",
-        description: "Logged in successfully",
+        description: "Account created successfully. You can now log in.",
       })
-      
-      // JWT token is automatically stored in localStorage by the loginUser function
-      router.push('/chat')
+      router.push('/login')
     } catch (error) {
       toast({
         title: "Error",
@@ -87,12 +110,12 @@ export default function AuthPage() {
         <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
           <div className="flex-1 flex flex-col justify-center items-center">
             <h1 className="text-2xl font-bold text-foreground mb-1">
-              Login to your account
+              Create an account
             </h1>
             <p className="text-muted-foreground text-sm mb-6">
-              Don't have an account? 
-              <Link href="/signup" className="text-primary hover:underline ml-1">
-                Sign up
+              Already have an account? 
+              <Link href="/login" className="text-primary hover:underline ml-1">
+                Login
               </Link>
             </p>
 
@@ -129,10 +152,41 @@ export default function AuthPage() {
                 </button>
               </div>
 
-              <div>
-                <Link href="#" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </Link>
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="bg-background border-input text-foreground placeholder:text-muted-foreground focus:border-primary pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={toggleConfirmPasswordVisibility}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Show/hide password"
+                >
+                  {showConfirmPassword ? (
+                    <Eye className="h-5 w-5" />
+                  ) : (
+                    <EyeOff className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="terms"
+                  checked={acceptTerms}
+                  onCheckedChange={(checked) => setAcceptTerms(checked === true)}
+                  className="border-input data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                />
+                <label htmlFor="terms" className="text-sm text-foreground">
+                  I accept the{" "}
+                  <Link href="#" className="text-primary hover:underline">
+                    terms of use
+                  </Link>
+                </label>
               </div>
 
               <Button 
@@ -140,7 +194,7 @@ export default function AuthPage() {
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 disabled={isLoading}
               >
-                {isLoading ? "Processing..." : "Login"}
+                {isLoading ? "Processing..." : "Create account"}
               </Button>
             </form>
           </div>
@@ -148,4 +202,4 @@ export default function AuthPage() {
       </div>
     </div>
   )
-}
+} 
