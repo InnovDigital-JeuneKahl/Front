@@ -727,7 +727,7 @@ const handleSendMessage = useCallback(async (e?: React.FormEvent) => {
       }
     };
     
-    let result;
+    let result: any;
     
     // Check if files are attached
     if (newMessage.files && newMessage.files.length > 0) {
@@ -766,41 +766,56 @@ const handleSendMessage = useCallback(async (e?: React.FormEvent) => {
       );
     }
     
-    // Create assistant response message with type-safe checks
+    // Get a response string from the result
+    let responseText = "I processed your request, but no direct response was generated.";
+    let keyPointsList: string[] = [];
+    
+    // Extract response text from result safely
+    if (result && typeof result === 'object') {
+      if ('response' in result && typeof result.response === 'string') {
+        responseText = result.response;
+      } else if ('answer' in result && 
+                result.answer && 
+                typeof result.answer === 'object' && 
+                'response' in result.answer) {
+        responseText = String(result.answer.response);
+      }
+      
+      // Extract key points from result
+      if ('results' in result && Array.isArray(result.results)) {
+        keyPointsList = result.results
+          .filter((item: any) => item && typeof item === 'object' && 'content' in item)
+          .map((item: any) => String(item.content));
+      } else if ('relevant_passages' in result && Array.isArray(result.relevant_passages)) {
+        keyPointsList = result.relevant_passages
+          .filter((passage: any) => passage && typeof passage === 'object')
+          .map((passage: any) => {
+            if ('content' in passage) return String(passage.content);
+            if ('text' in passage) return String(passage.text);
+            return '';
+          });
+      } else if ('answer' in result && 
+                result.answer && 
+                typeof result.answer === 'object' && 
+                'sources' in result.answer && 
+                Array.isArray(result.answer.sources)) {
+        keyPointsList = result.answer.sources
+          .filter((source: any) => source && typeof source === 'object' && 'content_snippet' in source)
+          .map((source: any) => String(source.content_snippet));
+      }
+    }
+    
+    // Create assistant message with non-nullable analysis results
     const assistantMessage: Message = {
       id: generateId(),
       type: "text",
-      content: "I processed your request, but no direct response was generated.",
+      content: responseText,
       timestamp: new Date(),
       sender: "assistant",
+      analysisResults: {
+        keyPoints: keyPointsList
+      }
     };
-    
-    // Handle different response formats safely
-    if ('answer' in result && result.answer?.response) {
-      assistantMessage.content = result.answer.response;
-    } else if ('response' in result && result.response) {
-      assistantMessage.content = result.response;
-    }
-    
-    // Add analysis results if available
-    if (assistantMessage.analysisResults === undefined) {
-      assistantMessage.analysisResults = { keyPoints: [] };
-    }
-    
-    // Handle different passage formats safely
-    if ('relevant_passages' in result && result.relevant_passages) {
-      assistantMessage.analysisResults.keyPoints = result.relevant_passages.map(
-        (passage: any) => passage.content || passage.text
-      );
-    } else if ('answer' in result && result.answer?.sources) {
-      assistantMessage.analysisResults.keyPoints = result.answer.sources.map(
-        (source: any) => source.content_snippet
-      );
-    } else if ('results' in result && result.results) {
-      assistantMessage.analysisResults.keyPoints = result.results.map(
-        (item: any) => item.content
-      );
-    }
     
     // Add the response to the chat
     setMessages(prev => [...prev, assistantMessage]);
@@ -1144,23 +1159,57 @@ const attachRecordedAudio = useCallback(() => {
             thread_id: activeThreadId
           }
         )
-          .then(result => {
-            // Create assistant response message
+          .then((result: any) => {
+            // Get a response string from the result
+            let responseText = "I processed your request, but no direct response was generated.";
+            let keyPointsList: string[] = [];
+            
+            // Extract response text from result safely
+            if (result && typeof result === 'object') {
+              if ('response' in result && typeof result.response === 'string') {
+                responseText = result.response;
+              } else if ('answer' in result && 
+                        result.answer && 
+                        typeof result.answer === 'object' && 
+                        'response' in result.answer) {
+                responseText = String(result.answer.response);
+              }
+              
+              // Extract key points from result
+              if ('results' in result && Array.isArray(result.results)) {
+                keyPointsList = result.results
+                  .filter((item: any) => item && typeof item === 'object' && 'content' in item)
+                  .map((item: any) => String(item.content));
+              } else if ('relevant_passages' in result && Array.isArray(result.relevant_passages)) {
+                keyPointsList = result.relevant_passages
+                  .filter((passage: any) => passage && typeof passage === 'object')
+                  .map((passage: any) => {
+                    if ('content' in passage) return String(passage.content);
+                    if ('text' in passage) return String(passage.text);
+                    return '';
+                  });
+              } else if ('answer' in result && 
+                        result.answer && 
+                        typeof result.answer === 'object' && 
+                        'sources' in result.answer && 
+                        Array.isArray(result.answer.sources)) {
+                keyPointsList = result.answer.sources
+                  .filter((source: any) => source && typeof source === 'object' && 'content_snippet' in source)
+                  .map((source: any) => String(source.content_snippet));
+              }
+            }
+            
+            // Create assistant message with non-nullable analysis results
             const assistantMessage: Message = {
               id: generateId(),
               type: "text",
-              content: result.response || "I processed your request, but no direct response was generated.",
+              content: responseText,
               timestamp: new Date(),
               sender: "assistant",
-              analysisResults: { keyPoints: [] }
+              analysisResults: {
+                keyPoints: keyPointsList
+              }
             };
-            
-            // Add any relevant passages as key points
-            if (result.results) {
-              assistantMessage.analysisResults.keyPoints = result.results.map(
-                item => item.content
-              );
-            }
             
             // Add the response to the chat
             setMessages(prev => [...prev, assistantMessage]);

@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { toast } from './use-toast';
 import { FileMetadata } from '../api/orchestration';
 import { 
   processFilesWithOrchestration, 
